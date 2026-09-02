@@ -1,0 +1,7 @@
+{
+  "name": "Wallpaper Studio",
+  "description": "Production-grade procedural geometric and mathematical wallpaper generator powered by deterministic algorithms, Material You dynamic color, and native offscreen canvas rendering.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

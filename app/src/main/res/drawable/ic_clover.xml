@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+
+    <!-- Material 3 Clover Vector for In-App About Screen -->
+    <group
+        android:pivotX="24"
+        android:pivotY="24">
+        <!-- Top Leaf -->
+        <path
+            android:fillColor="@color/md_theme_primary"
+            android:pathData="M24,8 C28.42,8 32,11.58 32,16 C32,20.42 28.42,24 24,24 C19.58,24 16,20.42 16,16 C16,11.58 19.58,8 24,8 Z" />
+
+        <!-- Bottom Leaf -->
+        <path
+            android:fillColor="@color/md_theme_primary"
+            android:pathData="M24,24 C28.42,24 32,27.58 32,32 C32,36.42 28.42,40 24,40 C19.58,40 16,36.42 16,32 C16,27.58 19.58,24 24,24 Z" />
+
+        <!-- Left Leaf -->
+        <path
+            android:fillColor="@color/md_theme_primary"
+            android:pathData="M16,16 C20.42,16 24,19.58 24,24 C24,28.42 20.42,32 16,32 C11.58,32 8,28.42 8,24 C8,19.58 11.58,16 16,16 Z" />
+
+        <!-- Right Leaf -->
+        <path
+            android:fillColor="@color/md_theme_primary"
+            android:pathData="M32,16 C36.42,16 40,19.58 40,24 C40,28.42 36.42,32 32,32 C27.58,32 24,28.42 24,24 C24,19.58 27.58,16 32,16 Z" />
+
+        <!-- Center Seed Accent -->
+        <path
+            android:fillColor="@color/md_theme_surfaceContainer"
+            android:pathData="M24,22 C25.1,22 26,22.9 26,24 C26,25.1 25.1,26 24,26 C22.9,26 22,25.1 22,24 C22,22.9 22.9,22 24,22 Z" />
+    </group>
+</vector>

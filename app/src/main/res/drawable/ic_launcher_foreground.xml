@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Material 3 Four-Leaf Clover Shape (Four overlapping circular/pill lobes intersecting at right angles) -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54">
+        
+        <!-- Top Leaf Lobe -->
+        <path
+            android:fillColor="@color/md_theme_primary"
+            android:pathData="M54,28 C61.73,28 68,34.27 68,42 C68,49.73 61.73,56 54,56 C46.27,56 40,49.73 40,42 C40,34.27 46.27,28 54,28 Z" />
+
+        <!-- Bottom Leaf Lobe -->
+        <path
+            android:fillColor="@color/md_theme_primary"
+            android:pathData="M54,52 C61.73,52 68,58.27 68,66 C68,73.73 61.73,80 54,80 C46.27,80 40,73.73 40,66 C40,58.27 46.27,52 54,52 Z" />
+
+        <!-- Left Leaf Lobe -->
+        <path
+            android:fillColor="@color/md_theme_primary"
+            android:pathData="M42,40 C49.73,40 56,46.27 56,54 C56,61.73 49.73,68 42,68 C34.27,68 28,61.73 28,54 C28,46.27 34.27,40 42,40 Z" />
+
+        <!-- Right Leaf Lobe -->
+        <path
+            android:fillColor="@color/md_theme_primary"
+            android:pathData="M66,40 C73.73,40 80,46.27 80,54 C80,61.73 73.73,68 66,68 C58.27,68 52,61.73 52,54 C52,46.27 58.27,40 66,40 Z" />
+
+        <!-- Center Core Accent Ring -->
+        <path
+            android:fillColor="@color/md_theme_surfaceContainer"
+            android:pathData="M54,50 C56.21,50 58,51.79 58,54 C58,56.21 56.21,58 54,58 C51.79,58 50,56.21 50,54 C50,51.79 51.79,50 54,50 Z" />
+    </group>
+</vector>
