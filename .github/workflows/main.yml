@@ -23,6 +23,12 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
+      - name: Generate Dummy Debug Keystore
+        run: |
+          keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keypass android -storepass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          mkdir -p ~/.android
+          cp debug.keystore ~/.android/debug.keystore
+
       - name: Build Debug APK
         run: gradle assembleDebug --stacktrace
 
