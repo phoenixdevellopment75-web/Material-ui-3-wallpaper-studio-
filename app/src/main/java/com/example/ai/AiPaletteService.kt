@@ -10,7 +10,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
-import kotlin.math.abs
 
 class AiPaletteService {
 
@@ -21,9 +20,182 @@ class AiPaletteService {
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
+    suspend fun fetchAvailableModels(
+        provider: AiProvider,
+        apiKey: String
+    ): Result<List<String>> = withContext(Dispatchers.IO) {
+        val trimmedKey = apiKey.trim()
+        if (trimmedKey.isEmpty()) {
+            return@withContext Result.success(getDefaultModels(provider))
+        }
+
+        try {
+            val models = when (provider) {
+                AiProvider.GEMINI -> fetchGeminiModels(trimmedKey)
+                AiProvider.OPENAI -> fetchOpenAiModels(trimmedKey)
+                AiProvider.OPENROUTER -> fetchOpenRouterModels(trimmedKey)
+                AiProvider.NVIDIA_NIM -> fetchNvidiaModels(trimmedKey)
+            }
+            if (models.isEmpty()) {
+                Result.success(getDefaultModels(provider))
+            } else {
+                Result.success(models)
+            }
+        } catch (e: Exception) {
+            // If network or key issue during model listing, return failure with message but preserve defaults available
+            Result.failure(e)
+        }
+    }
+
+    private fun fetchGeminiModels(apiKey: String): List<String> {
+        val url = "https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey"
+        val request = Request.Builder().url(url).get().build()
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                val errorBody = response.body?.string()?.take(200) ?: "HTTP ${response.code}"
+                throw Exception("Gemini API ($response.code): $errorBody")
+            }
+            val body = response.body?.string() ?: return emptyList()
+            val root = JSONObject(body)
+            val modelsArray = root.optJSONArray("models") ?: return emptyList()
+            val result = mutableListOf<String>()
+            for (i in 0 until modelsArray.length()) {
+                val modelObj = modelsArray.getJSONObject(i)
+                val supportedMethods = modelObj.optJSONArray("supportedGenerationMethods") ?: JSONArray()
+                var canGenerate = false
+                for (j in 0 until supportedMethods.length()) {
+                    if (supportedMethods.optString(j) == "generateContent") {
+                        canGenerate = true
+                        break
+                    }
+                }
+                if (canGenerate) {
+                    val rawName = modelObj.optString("name", "")
+                    val cleanName = rawName.removePrefix("models/")
+                    if (cleanName.isNotBlank()) {
+                        result.add(cleanName)
+                    }
+                }
+            }
+            // Sort to prioritize flash and newer models first
+            return result.sortedWith(compareByDescending<String> { it.contains("flash") }
+                .thenByDescending { it.contains("2.5") || it.contains("2.0") }
+                .thenBy { it })
+        }
+    }
+
+    private fun fetchOpenAiModels(apiKey: String): List<String> {
+        val url = "https://api.openai.com/v1/models"
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer $apiKey")
+            .get()
+            .build()
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                val errorBody = response.body?.string()?.take(200) ?: "HTTP ${response.code}"
+                throw Exception("OpenAI API ($response.code): $errorBody")
+            }
+            val body = response.body?.string() ?: return emptyList()
+            val root = JSONObject(body)
+            val dataArray = root.optJSONArray("data") ?: return emptyList()
+            val result = mutableListOf<String>()
+            for (i in 0 until dataArray.length()) {
+                val id = dataArray.getJSONObject(i).optString("id", "")
+                if (id.startsWith("gpt-") || id.startsWith("o1") || id.startsWith("o3")) {
+                    result.add(id)
+                }
+            }
+            return result.sorted()
+        }
+    }
+
+    private fun fetchOpenRouterModels(apiKey: String): List<String> {
+        val url = "https://openrouter.ai/api/v1/models"
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer $apiKey")
+            .get()
+            .build()
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                val errorBody = response.body?.string()?.take(200) ?: "HTTP ${response.code}"
+                throw Exception("OpenRouter API ($response.code): $errorBody")
+            }
+            val body = response.body?.string() ?: return emptyList()
+            val root = JSONObject(body)
+            val dataArray = root.optJSONArray("data") ?: return emptyList()
+            val result = mutableListOf<String>()
+            for (i in 0 until dataArray.length()) {
+                val id = dataArray.getJSONObject(i).optString("id", "")
+                if (id.isNotBlank()) {
+                    result.add(id)
+                }
+            }
+            return result.take(30)
+        }
+    }
+
+    private fun fetchNvidiaModels(apiKey: String): List<String> {
+        val url = "https://integrate.api.nvidia.com/v1/models"
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer $apiKey")
+            .get()
+            .build()
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                val errorBody = response.body?.string()?.take(200) ?: "HTTP ${response.code}"
+                throw Exception("NVIDIA NIM API ($response.code): $errorBody")
+            }
+            val body = response.body?.string() ?: return emptyList()
+            val root = JSONObject(body)
+            val dataArray = root.optJSONArray("data") ?: return emptyList()
+            val result = mutableListOf<String>()
+            for (i in 0 until dataArray.length()) {
+                val id = dataArray.getJSONObject(i).optString("id", "")
+                if (id.isNotBlank()) {
+                    result.add(id)
+                }
+            }
+            return result.take(30)
+        }
+    }
+
+    fun getDefaultModels(provider: AiProvider): List<String> {
+        return when (provider) {
+            AiProvider.GEMINI -> listOf(
+                "gemini-2.0-flash",
+                "gemini-2.5-flash",
+                "gemini-1.5-flash",
+                "gemini-1.5-pro",
+                "gemini-1.5-flash-8b"
+            )
+            AiProvider.OPENAI -> listOf(
+                "gpt-4o-mini",
+                "gpt-4o",
+                "gpt-4-turbo",
+                "gpt-3.5-turbo"
+            )
+            AiProvider.OPENROUTER -> listOf(
+                "google/gemini-2.5-flash",
+                "openai/gpt-4o-mini",
+                "anthropic/claude-3.5-haiku",
+                "meta-llama/llama-3.3-70b-instruct"
+            )
+            AiProvider.NVIDIA_NIM -> listOf(
+                "meta/llama-3.1-70b-instruct",
+                "meta/llama-3.3-70b-instruct",
+                "mistralai/mistral-large-2-instruct",
+                "nvidia/llama-3.1-nemotron-70b-instruct"
+            )
+        }
+    }
+
     suspend fun generatePalette(
         provider: AiProvider,
         apiKey: String,
+        model: String = provider.defaultModel,
         patternName: String,
         subTypeName: String,
         moodTag: String,
@@ -31,8 +203,9 @@ class AiPaletteService {
         customPrompt: String = ""
     ): Result<GeneratedAiPalette> = withContext(Dispatchers.IO) {
         val trimmedKey = apiKey.trim()
+        val chosenModel = model.trim().ifEmpty { provider.defaultModel }
+
         if (trimmedKey.isEmpty()) {
-            // Return offline harmonic generation if no BYOK key is set yet
             return@withContext Result.success(
                 generateLocalFallbackPalette(patternName, moodTag, daylightContext)
             )
@@ -43,10 +216,10 @@ class AiPaletteService {
             val userPrompt = buildUserPrompt(patternName, subTypeName, moodTag, daylightContext, customPrompt)
 
             val rawJsonText = when (provider) {
-                AiProvider.GEMINI -> callGemini(trimmedKey, provider.defaultModel, systemPrompt, userPrompt)
-                AiProvider.OPENAI -> callOpenAi(trimmedKey, provider.defaultModel, systemPrompt, userPrompt)
-                AiProvider.OPENROUTER -> callOpenRouter(trimmedKey, provider.defaultModel, systemPrompt, userPrompt)
-                AiProvider.NVIDIA_NIM -> callNvidiaNim(trimmedKey, provider.defaultModel, systemPrompt, userPrompt)
+                AiProvider.GEMINI -> callGemini(trimmedKey, chosenModel, systemPrompt, userPrompt)
+                AiProvider.OPENAI -> callOpenAi(trimmedKey, chosenModel, systemPrompt, userPrompt)
+                AiProvider.OPENROUTER -> callOpenRouter(trimmedKey, chosenModel, systemPrompt, userPrompt)
+                AiProvider.NVIDIA_NIM -> callNvidiaNim(trimmedKey, chosenModel, systemPrompt, userPrompt)
             }
 
             val parsedPalette = parsePaletteJson(rawJsonText)
@@ -91,7 +264,8 @@ class AiPaletteService {
     }
 
     private fun callGemini(apiKey: String, model: String, systemPrompt: String, userPrompt: String): String {
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey"
+        val cleanModel = model.removePrefix("models/").trim().ifEmpty { "gemini-2.0-flash" }
+        val url = "https://generativelanguage.googleapis.com/v1beta/models/$cleanModel:generateContent?key=$apiKey"
 
         val rootJson = JSONObject().apply {
             val contentsArray = JSONArray().apply {
@@ -119,7 +293,8 @@ class AiPaletteService {
 
         httpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                throw Exception("Gemini API Error (${response.code}): ${response.body?.string()?.take(200)}")
+                val errBody = response.body?.string()?.take(300) ?: "HTTP ${response.code}"
+                throw Exception("Gemini API Error (${response.code}): $errBody")
             }
             val body = response.body?.string() ?: throw Exception("Empty response from Gemini")
             val respJson = JSONObject(body)
@@ -222,7 +397,8 @@ class AiPaletteService {
     private fun executeChatCompletion(request: Request, providerName: String): String {
         httpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
-                throw Exception("$providerName API Error (${response.code}): ${response.body?.string()?.take(200)}")
+                val errBody = response.body?.string()?.take(300) ?: "HTTP ${response.code}"
+                throw Exception("$providerName API Error (${response.code}): $errBody")
             }
             val body = response.body?.string() ?: throw Exception("Empty response from $providerName")
             val respJson = JSONObject(body)
@@ -235,7 +411,6 @@ class AiPaletteService {
     }
 
     private fun parsePaletteJson(rawText: String): GeneratedAiPalette {
-        // Clean markdown backticks if present
         var cleaned = rawText.trim()
         if (cleaned.startsWith("```json")) {
             cleaned = cleaned.removePrefix("```json")
@@ -264,7 +439,6 @@ class AiPaletteService {
             }
         }
 
-        // Guarantee at least 5 stops
         if (colorList.size < 5) {
             val fallbacks = generateLocalFallbackPalette("Organic", "Monet", DaylightContext.TWILIGHT)
             return GeneratedAiPalette(
@@ -281,7 +455,7 @@ class AiPaletteService {
         )
     }
 
-    private fun parseHexColorOrNull(hex: String): Color? {
+    fun parseHexColorOrNull(hex: String): Color? {
         val clean = hex.trim().removePrefix("#")
         return try {
             when (clean.length) {
@@ -341,7 +515,6 @@ class AiPaletteService {
                 DaylightContext.GOLDEN_HOUR -> "Golden Solstice" to listOf("#2B2117", "#4D3823", "#825F39", "#C2945D", "#F5E4CE")
                 DaylightContext.TWILIGHT -> "Nordic Twilight" to listOf("#1A1C24", "#2E3342", "#4F5770", "#8D97B8", "#DDE2F2")
                 DaylightContext.MIDNIGHT_OLED -> "Midnight OLED" to listOf("#000000", "#12141A", "#242C3D", "#4B5F8A", "#8EA9E6")
-                else -> "Nordic Dusk" to listOf("#1A1C1E", "#2E3033", "#5C5F62", "#D1C4E9", "#E8DEF8")
             }
         }
 

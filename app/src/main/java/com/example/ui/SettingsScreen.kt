@@ -14,7 +14,9 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,47 +28,62 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
@@ -77,12 +94,20 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
-
+import com.example.ai.AiGenerationState
+import com.example.ai.AiProvider
+import com.example.ai.DaylightContext
+import com.example.ai.GeneratedAiPalette
 import com.example.ui.components.FloatingPillTabRow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 enum class MotionScale(val label: String, val description: String, val stiffness: Float, val damping: Float) {
     SNAPPY("Snappy", "Fast, crisp spring transitions", 800f, 0.75f),
@@ -90,10 +115,16 @@ enum class MotionScale(val label: String, val description: String, val stiffness
     GENTLE("Gentle", "Soft, flowing motion", 180f, 0.85f)
 }
 
-enum class AppThemeMode(val label: String, val description: String) {
-    SYSTEM_MONET("Monet Engine", "Dynamic Material You accent theming"),
-    DARK("Dark Theme", "Rich contrast dark surfaces"),
-    LIGHT("Light Theme", "Crisp, bright light surfaces")
+enum class ThemeMode(val label: String) {
+    SYSTEM("System"),
+    LIGHT("Light"),
+    DARK("Dark")
+}
+
+enum class StaticThemePreset(val label: String, val description: String) {
+    WARM_SAND("Warm Sand", "Earthy terracotta, warm clay, and cream tones"),
+    NORDIC_SLATE("Nordic Slate", "Cool minimalist indigo, steel blue, and slate"),
+    OLED_OBSIDIAN("OLED Obsidian", "Pure deep true-black OLED background with lilac accents")
 }
 
 enum class RenderResolutionPreset(val label: String, val width: Int, val height: Int) {
@@ -115,8 +146,10 @@ enum class HapticStrength(val label: String) {
 }
 
 data class AppSettingsState(
+    val dynamicMonetEnabled: Boolean = true,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val staticThemePreset: StaticThemePreset = StaticThemePreset.WARM_SAND,
     val motionScale: MotionScale = MotionScale.EXPRESSIVE,
-    val themeMode: AppThemeMode = AppThemeMode.SYSTEM_MONET,
     val resolutionPreset: RenderResolutionPreset = RenderResolutionPreset.QHD_PLUS,
     val exportFormat: ExportImageFormat = ExportImageFormat.PNG,
     val antiAliasingEnabled: Boolean = true,
@@ -127,6 +160,7 @@ data class AppSettingsState(
 
 enum class SettingsTab(val label: String, val icon: ImageVector) {
     PERSONALIZATION("Personalization", Icons.Default.Palette),
+    AI_INTEGRATION("AI Integration", Icons.Default.AutoAwesome),
     ADVANCED("Advanced", Icons.Default.Tune),
     ABOUT("About", Icons.Default.Info)
 }
@@ -134,22 +168,28 @@ enum class SettingsTab(val label: String, val icon: ImageVector) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
+    viewModel: WallpaperViewModel,
     settings: AppSettingsState,
     onUpdateSettings: (AppSettingsState) -> Unit,
     onResetDefaults: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
     val haptics = LocalHapticFeedback.current
+    val context = LocalContext.current
     var selectedTab by remember { mutableStateOf(SettingsTab.PERSONALIZATION) }
     val tabs = SettingsTab.entries
+
+    LaunchedEffect(Unit) {
+        viewModel.initAiKeyStorage(context)
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        "Settings & Preferences",
-                        style = MaterialTheme.typography.titleMedium,
+                        text = "Settings & Preferences",
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -159,13 +199,29 @@ fun SettingsScreen(
                         modifier = Modifier.testTag("settings_back_button")
                     ) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
                         )
                     }
                 },
+                actions = {
+                    IconButton(
+                        onClick = {
+                            if (settings.hapticStrength != HapticStrength.OFF) {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
+                            onResetDefaults()
+                        },
+                        modifier = Modifier.testTag("settings_reset_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Reset Defaults"
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.90f)
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
                 )
             )
         }
@@ -201,17 +257,17 @@ fun SettingsScreen(
                 )
             }
 
-            // Shared-axis slide and fade transitions between sub-menus
+            // Tab Content with animated transitions
             AnimatedContent(
                 targetState = selectedTab,
                 transitionSpec = {
                     val isForward = targetState.ordinal > initialState.ordinal
                     val slideIn = slideInHorizontally(
-                        animationSpec = spring(dampingRatio = 0.75f, stiffness = 300f),
+                        animationSpec = spring(dampingRatio = 0.75f, stiffness = 320f),
                         initialOffsetX = { if (isForward) it else -it }
                     ) + fadeIn()
                     val slideOut = slideOutHorizontally(
-                        animationSpec = spring(dampingRatio = 0.75f, stiffness = 300f),
+                        animationSpec = spring(dampingRatio = 0.75f, stiffness = 320f),
                         targetOffsetX = { if (isForward) -it else it }
                     ) + fadeOut()
                     slideIn togetherWith slideOut
@@ -224,20 +280,23 @@ fun SettingsScreen(
                         settings = settings,
                         onUpdateSettings = onUpdateSettings
                     )
+                    SettingsTab.AI_INTEGRATION -> AiIntegrationTabContent(
+                        viewModel = viewModel
+                    )
                     SettingsTab.ADVANCED -> AdvancedTabContent(
                         settings = settings,
-                        onUpdateSettings = onUpdateSettings,
-                        onResetDefaults = onResetDefaults
+                        onUpdateSettings = onUpdateSettings
                     )
-                    SettingsTab.ABOUT -> AboutTabContent(
-                        settings = settings
-                    )
+                    SettingsTab.ABOUT -> AboutTabContent()
                 }
             }
         }
     }
 }
 
+// -------------------------------------------------------------
+// TAB 1: Personalization Content
+// -------------------------------------------------------------
 @Composable
 private fun PersonalizationTabContent(
     settings: AppSettingsState,
@@ -250,114 +309,196 @@ private fun PersonalizationTabContent(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(16.dp)
-            .navigationBarsPadding(),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Theme Selection
-        SettingsSectionHeader(title = "DYNAMIC THEMING & ACCENT", icon = Icons.Default.Palette)
+        // Dynamic Theming (Monet) ON/OFF Toggle
+        SettingsCard(title = "Dynamic Theming (Monet)") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Dynamic Monet Colors",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = if (settings.dynamicMonetEnabled)
+                            "Dynamically extracts color tokens from wallpaper & system palette"
+                        else
+                            "Using curated static minimalist color themes",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = settings.dynamicMonetEnabled,
+                    onCheckedChange = { isEnabled ->
+                        if (settings.hapticStrength != HapticStrength.OFF) {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        }
+                        onUpdateSettings(settings.copy(dynamicMonetEnabled = isEnabled))
+                    },
+                    modifier = Modifier.testTag("toggle_dynamic_monet")
+                )
+            }
+        }
 
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                AppThemeMode.entries.forEach { mode ->
-                    val isSelected = settings.themeMode == mode
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable {
+        // Static Theme Presets (Active when Monet is OFF)
+        if (!settings.dynamicMonetEnabled) {
+            SettingsCard(title = "Curated Minimalist Theme") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    StaticThemePreset.entries.forEach { preset ->
+                        val isSelected = settings.staticThemePreset == preset
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                            border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .clickable {
+                                    if (settings.hapticStrength != HapticStrength.OFF) {
+                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    }
+                                    onUpdateSettings(settings.copy(staticThemePreset = preset))
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = preset.label,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = preset.description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                if (isSelected) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Independent Theme Mode Selector (System / Light / Dark)
+        SettingsCard(title = "Theme Mode") {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Appearance Mode",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ThemeMode.entries.forEach { mode ->
+                        val isSelected = settings.themeMode == mode
+                        FilledTonalButton(
+                            onClick = {
                                 if (settings.hapticStrength != HapticStrength.OFF) {
                                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 }
                                 onUpdateSettings(settings.copy(themeMode = mode))
-                            }
-                            .testTag("theme_${mode.name.lowercase()}"),
-                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Row(
+                            },
+                            shape = RoundedCornerShape(20.dp),
+                            colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+                                containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
+                                contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                            ),
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .weight(1f)
+                                .testTag("theme_mode_${mode.name.lowercase()}")
                         ) {
-                            Column {
-                                Text(
-                                    text = mode.label,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = mode.description,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            if (isSelected) {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
+                            Text(
+                                text = mode.label,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                style = MaterialTheme.typography.labelLarge
+                            )
                         }
                     }
                 }
             }
         }
 
-        // Motion Scale Adjustments
-        SettingsSectionHeader(title = "UI MOTION SCALE & SPRING PHYSICS", icon = Icons.Default.Tune)
-
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                MotionScale.entries.forEach { option ->
-                    val isSelected = settings.motionScale == option
+        // Motion & Physics Scale
+        SettingsCard(title = "Motion Physics & Animation Scale") {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                MotionScale.entries.forEach { motion ->
+                    val isSelected = settings.motionScale == motion
                     Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(16.dp))
                             .clickable {
                                 if (settings.hapticStrength != HapticStrength.OFF) {
                                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 }
-                                onUpdateSettings(settings.copy(motionScale = option))
+                                onUpdateSettings(settings.copy(motionScale = motion))
                             }
-                            .testTag("motion_${option.name.lowercase()}"),
-                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = option.label,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold
+                                    text = motion.label,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = option.description,
+                                    text = motion.description,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             if (isSelected) {
                                 Icon(
                                     Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
+                                    contentDescription = "Selected",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
@@ -366,72 +507,54 @@ private fun PersonalizationTabContent(
             }
         }
 
-        // Haptic Feedback Slider
-        SettingsSectionHeader(title = "HAPTIC FEEDBACK STRENGTH", icon = Icons.Default.Tune)
-
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Haptic Feedback Intensity
+        SettingsCard(title = "Haptic Tactile Feedback") {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "Vibration Intensity",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        settings.hapticStrength.label,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold
+                        text = "Vibration Intensity: ${settings.hapticStrength.label}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
                     )
                 }
-
-                val sliderValue = when (settings.hapticStrength) {
-                    HapticStrength.OFF -> 0f
-                    HapticStrength.SUBTLE -> 1f
-                    HapticStrength.FIRM -> 2f
-                }
-
-                Slider(
-                    value = sliderValue,
-                    onValueChange = { newVal ->
-                        val strength = when (newVal.toInt()) {
-                            0 -> HapticStrength.OFF
-                            1 -> HapticStrength.SUBTLE
-                            else -> HapticStrength.FIRM
-                        }
-                        if (strength != HapticStrength.OFF) {
-                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        }
-                        onUpdateSettings(
-                            settings.copy(
-                                hapticStrength = strength,
-                                hapticsEnabled = (strength != HapticStrength.OFF)
-                            )
-                        )
-                    },
-                    valueRange = 0f..2f,
-                    steps = 1,
-                    colors = SliderDefaults.colors(
-                        thumbColor = MaterialTheme.colorScheme.primary,
-                        activeTrackColor = MaterialTheme.colorScheme.primary
-                    ),
-                    modifier = Modifier.testTag("haptic_strength_slider")
-                )
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Off", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Subtle", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Firm", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    HapticStrength.entries.forEach { strength ->
+                        val isSelected = settings.hapticStrength == strength
+                        FilledTonalButton(
+                            onClick = {
+                                if (strength != HapticStrength.OFF) {
+                                    val feedback = if (strength == HapticStrength.FIRM) HapticFeedbackType.LongPress else HapticFeedbackType.TextHandleMove
+                                    haptics.performHapticFeedback(feedback)
+                                }
+                                onUpdateSettings(settings.copy(hapticStrength = strength, hapticsEnabled = strength != HapticStrength.OFF))
+                            },
+                            shape = RoundedCornerShape(20.dp),
+                            colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+                                containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
+                                contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                            ),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = strength.label,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -440,11 +563,358 @@ private fun PersonalizationTabContent(
     }
 }
 
+// -------------------------------------------------------------
+// TAB 2: AI Integration (Moved from Home Viewport)
+// -------------------------------------------------------------
+@Composable
+private fun AiIntegrationTabContent(
+    viewModel: WallpaperViewModel
+) {
+    val haptics = LocalHapticFeedback.current
+    val scrollState = rememberScrollState()
+    val uiState = viewModel.uiState.value
+
+    val currentProvider = uiState.selectedAiProvider
+    var apiKeyInput by remember(currentProvider) { mutableStateOf(viewModel.getApiKey(currentProvider)) }
+    var isKeyMasked by remember { mutableStateOf(true) }
+
+    val availableModels = uiState.availableModels[currentProvider] ?: viewModel.aiService.getDefaultModels(currentProvider)
+    val selectedModel = uiState.selectedModels[currentProvider] ?: availableModels.firstOrNull() ?: currentProvider.defaultModel
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Provider Selector
+        SettingsCard(title = "AI Provider Architecture (BYOK)") {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "Select Provider",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    AiProvider.entries.forEach { provider ->
+                        val isSelected = provider == currentProvider
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                if (uiState.settings.hapticStrength != HapticStrength.OFF) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                }
+                                viewModel.setAiProvider(provider)
+                            },
+                            label = { Text(provider.displayName, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                            shape = RoundedCornerShape(20.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            modifier = Modifier.testTag("ai_provider_${provider.name.lowercase()}")
+                        )
+                    }
+                }
+            }
+        }
+
+        // Secure API Key Input
+        SettingsCard(title = "${currentProvider.displayName} API Key") {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedTextField(
+                    value = apiKeyInput,
+                    onValueChange = {
+                        apiKeyInput = it
+                        viewModel.saveApiKey(currentProvider, it)
+                    },
+                    label = { Text("API Key (${currentProvider.keyPlaceholder})") },
+                    placeholder = { Text(currentProvider.keyPlaceholder) },
+                    visualTransformation = if (isKeyMasked) PasswordVisualTransformation() else VisualTransformation.None,
+                    trailingIcon = {
+                        IconButton(onClick = { isKeyMasked = !isKeyMasked }) {
+                            Icon(
+                                if (isKeyMasked) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                contentDescription = "Toggle Visibility"
+                            )
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("ai_api_key_input")
+                )
+
+                Text(
+                    text = "Your API key is securely encrypted locally. It is never logged or sent to intermediate servers.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        // Dynamic Model Selector & Fetching (Fixes 404)
+        SettingsCard(title = "Dynamic Model Selector") {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Active Model: $selectedModel",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Fetch live model list directly from ${currentProvider.displayName}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    FilledTonalButton(
+                        onClick = {
+                            if (uiState.settings.hapticStrength != HapticStrength.OFF) {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
+                            viewModel.fetchModelsForProvider(currentProvider)
+                        },
+                        enabled = !uiState.isFetchingModels,
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.testTag("fetch_models_button")
+                    ) {
+                        if (uiState.isFetchingModels) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Fetch Models", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+
+                if (uiState.modelFetchError != null) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Error: ${uiState.modelFetchError}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+
+                // Model Selection Chips
+                Text(
+                    text = "Select Target Model:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    availableModels.forEach { modelName ->
+                        val isSelected = modelName == selectedModel
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                if (uiState.settings.hapticStrength != HapticStrength.OFF) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                }
+                                viewModel.setSelectedModel(currentProvider, modelName)
+                            },
+                            label = {
+                                Text(
+                                    modelName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            shape = RoundedCornerShape(16.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        // Generate AI Palette Test & Preview
+        SettingsCard(title = "Test AI Palette Synthesis") {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    text = "Daylight Lighting Context:",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    DaylightContext.entries.forEach { daylight ->
+                        val isSelected = daylight == uiState.aiTestDaylight
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { viewModel.setAiTestDaylight(daylight) },
+                            label = { Text(daylight.label, style = MaterialTheme.typography.labelSmall) },
+                            shape = RoundedCornerShape(20.dp)
+                        )
+                    }
+                }
+
+                FilledTonalButton(
+                    onClick = {
+                        if (uiState.settings.hapticStrength != HapticStrength.OFF) {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        }
+                        viewModel.testGenerateAiPalette()
+                    },
+                    enabled = uiState.aiTestState !is AiGenerationState.Loading,
+                    shape = RoundedCornerShape(24.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("test_ai_palette_button")
+                ) {
+                    if (uiState.aiTestState is AiGenerationState.Loading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Synthesizing Monotonic Ramp...")
+                    } else {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Generate AI Palette Test", fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Test Output Preview
+                when (val state = uiState.aiTestState) {
+                    is AiGenerationState.Success -> {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = state.palette.paletteName,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    FilledTonalButton(
+                                        onClick = { viewModel.applyGeneratedPalette(state.palette) },
+                                        shape = RoundedCornerShape(16.dp),
+                                        modifier = Modifier.testTag("apply_test_palette_button")
+                                    ) {
+                                        Text("Apply to Wallpaper", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                ) {
+                                    state.palette.colors.forEach { color ->
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .fillMaxSize()
+                                                .background(color)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    is AiGenerationState.Error -> {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "Test Failed: ${state.message}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                    }
+                    else -> {}
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+// -------------------------------------------------------------
+// TAB 3: Advanced Tab Content
+// -------------------------------------------------------------
 @Composable
 private fun AdvancedTabContent(
     settings: AppSettingsState,
-    onUpdateSettings: (AppSettingsState) -> Unit,
-    onResetDefaults: () -> Unit
+    onUpdateSettings: (AppSettingsState) -> Unit
 ) {
     val haptics = LocalHapticFeedback.current
     val scrollState = rememberScrollState()
@@ -453,58 +923,56 @@ private fun AdvancedTabContent(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(16.dp)
-            .navigationBarsPadding(),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Canvas Resolution & Export Scaling
-        SettingsSectionHeader(title = "CANVAS RESOLUTION & EXPORT SCALING", icon = Icons.Default.HighQuality)
-
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                RenderResolutionPreset.entries.forEach { preset ->
-                    val isSelected = settings.resolutionPreset == preset
+        // Export Resolution Presets
+        SettingsCard(title = "Wallpaper Export Resolution") {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                RenderResolutionPreset.entries.forEach { res ->
+                    val isSelected = settings.resolutionPreset == res
                     Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(16.dp))
                             .clickable {
                                 if (settings.hapticStrength != HapticStrength.OFF) {
                                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 }
-                                onUpdateSettings(settings.copy(resolutionPreset = preset))
+                                onUpdateSettings(settings.copy(resolutionPreset = res))
                             }
-                            .testTag("resolution_${preset.name.lowercase()}"),
-                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = preset.label,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold
+                                    text = res.label,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "${preset.width} × ${preset.height} px",
+                                    text = "${res.width} x ${res.height} px",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             if (isSelected) {
                                 Icon(
                                     Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
+                                    contentDescription = "Selected",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
@@ -513,47 +981,53 @@ private fun AdvancedTabContent(
             }
         }
 
-        // Export Format Selector
-        SettingsSectionHeader(title = "EXPORT IMAGE FORMAT", icon = Icons.Default.Tune)
-
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ExportImageFormat.entries.forEach { format ->
-                    val isSelected = settings.exportFormat == format
+        // Export File Format
+        SettingsCard(title = "Export Format") {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ExportImageFormat.entries.forEach { fmt ->
+                    val isSelected = settings.exportFormat == fmt
                     Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(16.dp))
                             .clickable {
                                 if (settings.hapticStrength != HapticStrength.OFF) {
                                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 }
-                                onUpdateSettings(settings.copy(exportFormat = format))
+                                onUpdateSettings(settings.copy(exportFormat = fmt))
                             }
-                            .testTag("format_${format.name.lowercase()}"),
-                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = format.label,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = fmt.label,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = fmt.mimeType,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                             if (isSelected) {
                                 Icon(
                                     Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
+                                    contentDescription = "Selected",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
@@ -562,40 +1036,34 @@ private fun AdvancedTabContent(
             }
         }
 
-        // Rendering Quality & Anti-Aliasing Toggles
-        SettingsSectionHeader(title = "ENGINE QUALITY & SAMPLING FLAGS", icon = Icons.Default.HighQuality)
-
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Quality & Anti-Aliasing Toggles
+        SettingsCard(title = "Engine Graphics & Supersampling") {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "Multi-pass Anti-Aliasing",
-                            style = MaterialTheme.typography.labelLarge,
+                            text = "Anti-Aliasing Filter",
+                            style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            "Smooth sub-pixel edge filtering on vector contours",
+                            text = "Smooth sub-pixel edge interpolation across all paths",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Switch(
                         checked = settings.antiAliasingEnabled,
-                        onCheckedChange = {
-                            if (settings.hapticStrength != HapticStrength.OFF) {
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            }
-                            onUpdateSettings(settings.copy(antiAliasingEnabled = it))
-                        },
-                        modifier = Modifier.testTag("antialiasing_switch")
+                        onCheckedChange = { onUpdateSettings(settings.copy(antiAliasingEnabled = it)) }
                     )
                 }
 
@@ -603,73 +1071,24 @@ private fun AdvancedTabContent(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "Vector Sub-sampling",
-                            style = MaterialTheme.typography.labelLarge,
+                            text = "2x Supersampling",
+                            style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            "Adaptive step tessellation for intricate curves",
+                            text = "Renders canvas at 2x resolution before downscaling for ultra-crisp edges",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Switch(
                         checked = settings.subSamplingEnabled,
-                        onCheckedChange = {
-                            if (settings.hapticStrength != HapticStrength.OFF) {
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            }
-                            onUpdateSettings(settings.copy(subSamplingEnabled = it))
-                        },
-                        modifier = Modifier.testTag("subsampling_switch")
-                    )
-                }
-            }
-        }
-
-        // Reset Engine Defaults
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .clickable {
-                    if (settings.hapticStrength != HapticStrength.OFF) {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    }
-                    onResetDefaults()
-                }
-                .testTag("reset_defaults_button"),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.Refresh,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error
-                )
-                Column {
-                    Text(
-                        "Reset Engine & Math Defaults",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    Text(
-                        "Restore factory mathematical parameters and palettes",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        onCheckedChange = { onUpdateSettings(settings.copy(subSamplingEnabled = it)) }
                     )
                 }
             }
@@ -679,207 +1098,249 @@ private fun AdvancedTabContent(
     }
 }
 
+// -------------------------------------------------------------
+// TAB 4: About Tab Content
+// -------------------------------------------------------------
 @Composable
-private fun AboutTabContent(
-    settings: AppSettingsState
-) {
+private fun AboutTabContent() {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
     val scrollState = rememberScrollState()
 
-    var isCloverPulsing by remember { mutableStateOf(false) }
+    var cloverTapCount by remember { mutableIntStateOf(0) }
+    var isPulsing by remember { mutableStateOf(false) }
     val cloverScale by animateFloatAsState(
-        targetValue = if (isCloverPulsing) 1.25f else 1.0f,
-        animationSpec = spring(dampingRatio = 0.45f, stiffness = 300f),
-        label = "clover_pulse"
+        targetValue = if (isPulsing) 1.25f else 1f,
+        animationSpec = spring(dampingRatio = 0.45f, stiffness = 400f),
+        label = "clover_scale"
     )
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(16.dp)
-            .navigationBarsPadding(),
+            .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // App Title & Interactive Pulsing M3 Clover Badge
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Interactive Clover Icon with spring pulse
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            modifier = Modifier
+                .size(96.dp)
+                .scale(cloverScale)
+                .clip(CircleShape)
+                .clickable {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    cloverTapCount++
+                    isPulsing = true
+                }
+                .testTag("about_clover_badge")
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.ic_clover),
+                    contentDescription = "Wallpaper Studio Clover Logo",
+                    modifier = Modifier.size(54.dp)
+                )
+            }
+        }
+
+        LaunchedEffect(isPulsing) {
+            if (isPulsing) {
+                delay(150)
+                isPulsing = false
+            }
+        }
+
+        Text(
+            text = "Wallpaper Studio",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+
+        // Version 2.4.1 Badge
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            modifier = Modifier.padding(bottom = 8.dp)
+        ) {
+            Text(
+                text = "Version 2.4.1 • Material 3 Expressive",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+            )
+        }
+
+        // Attribution Card: "Crafted by Phoenix with vibe coding"
         ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp)
+            shape = RoundedCornerShape(24.dp),
+            colors = androidx.compose.material3.CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            ),
+            modifier = Modifier.fillMaxWidth()
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Favorite,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp)
+                )
+                Text(
+                    text = "Crafted by Phoenix with vibe coding",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+
+        // Official GitHub Repository Button
+        ElevatedCard(
+            shape = RoundedCornerShape(24.dp),
+            colors = androidx.compose.material3.CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .clickable {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    val intent = Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse("https://github.com/phoenixdevellopment75-web/Material-ui-3-wallpaper-studio-")
+                    ).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(intent)
+                }
+                .testTag("github_repo_card")
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(96.dp)
-                        .scale(cloverScale)
+                        .size(44.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer)
-                        .clickable {
-                            if (settings.hapticStrength != HapticStrength.OFF) {
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            }
-                            isCloverPulsing = true
-                        }
-                        .testTag("interactive_clover_badge"),
+                        .background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.ic_clover),
-                        contentDescription = "Material 3 Clover Icon",
-                        modifier = Modifier.size(64.dp)
+                    Icon(
+                        imageVector = Icons.Default.Code,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
 
-                // Reset pulse after animation
-                if (isCloverPulsing) {
-                    androidx.compose.runtime.LaunchedEffect(Unit) {
-                        kotlinx.coroutines.delay(200)
-                        isCloverPulsing = false
-                    }
-                }
-
-                Text(
-                    text = "Wallpaper Studio",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer
-                ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Version 2.4.0 • Material You",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
-                }
-
-                // Vibe Coding Attribution
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Favorite,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.size(8.dp))
-                        Text(
-                            text = "Crafted by Phoenix with vibe coding",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer
-                        )
-                    }
-                }
-            }
-        }
-
-        // Architectural Details Breakdown
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Code, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Text(
-                        "Architecture & Mathematical Core",
+                        text = "Official GitHub Repository",
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "phoenixdevellopment75-web/Material-ui-3-wallpaper-studio-",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Text(
-                    "• 100% deterministic, local-first Kotlin math engine.\n" +
-                    "• Multi-pass ambient elevation shadows via Paint.setShadowLayer().\n" +
-                    "• Continuous 2D scalar fields with Marching Squares isoline extraction.\n" +
-                    "• Polar scallop geometry with smooth harmonic lobe curves.\n" +
-                    "• Strict monotonic luminance color matrix enforcing 8-12% lightness steps.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 20.sp
+
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                    contentDescription = "Open Repository",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
 
-        // External Links & Open Source
+        // Open Source License Button
         ElevatedCard(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com"))
-                            context.startActivity(intent)
-                        }
-                        .testTag("github_link_button"),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("GitHub Repository & Source", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+            shape = RoundedCornerShape(24.dp),
+            colors = androidx.compose.material3.CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .clickable {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    val intent = Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse("https://github.com/phoenixdevellopment75-web/Material-ui-3-wallpaper-studio-/blob/main/LICENSE")
+                    ).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     }
+                    context.startActivity(intent)
+                }
+                .testTag("license_card")
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.tertiaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
 
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.apache.org/licenses/LICENSE-2.0"))
-                            context.startActivity(intent)
-                        }
-                        .testTag("license_link_button"),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Apache 2.0 Open Source License", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
-                    }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Open Source License",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Apache 2.0 / Open Source Software",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
+
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                    contentDescription = "View License",
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
 
@@ -888,18 +1349,55 @@ private fun AboutTabContent(
 }
 
 @Composable
-private fun SettingsSectionHeader(title: String, icon: ImageVector) {
+private fun AboutInfoRow(label: String, value: String) {
     Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-            letterSpacing = 0.8.sp
-        )
+        Text(text = label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(text = value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+@Composable
+private fun SettingsCard(
+    title: String,
+    content: @Composable () -> Unit
+) {
+    ElevatedCard(
+        shape = RoundedCornerShape(24.dp),
+        colors = androidx.compose.material3.CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)
+            )
+            content()
+        }
+    }
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@Composable
+private fun FlowRow(
+    modifier: Modifier = Modifier,
+    horizontalArrangement: Arrangement.Horizontal = Arrangement.Start,
+    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
+    content: @Composable () -> Unit
+) {
+    androidx.compose.foundation.layout.FlowRow(
+        modifier = modifier,
+        horizontalArrangement = horizontalArrangement,
+        verticalArrangement = verticalArrangement
+    ) {
+        content()
     }
 }

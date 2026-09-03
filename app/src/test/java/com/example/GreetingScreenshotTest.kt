@@ -2,8 +2,8 @@ package com.example
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
-import com.example.ui.AppThemeMode
 import com.example.ui.MainScreen
+import com.example.ui.ThemeMode
 import com.example.ui.theme.MyApplicationTheme
 import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -24,7 +24,7 @@ class GreetingScreenshotTest {
   @Test
   fun wallpaperStudio_screenshot() {
     composeTestRule.setContent {
-      MyApplicationTheme(themeMode = AppThemeMode.DARK) {
+      MyApplicationTheme(themeMode = ThemeMode.DARK) {
         MainScreen()
       }
     }

@@ -19,10 +19,13 @@ class MainActivity : ComponentActivity() {
       val viewModel: WallpaperViewModel = viewModel()
       val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-      MyApplicationTheme(themeMode = uiState.settings.themeMode) {
+      MyApplicationTheme(
+        dynamicMonetEnabled = uiState.settings.dynamicMonetEnabled,
+        themeMode = uiState.settings.themeMode,
+        staticPreset = uiState.settings.staticThemePreset
+      ) {
         MainScreen(viewModel = viewModel)
       }
     }
   }
 }
-

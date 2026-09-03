@@ -261,24 +261,12 @@ object TopographicRenderer : WallpaperRenderer {
                         val detail = (sin(nx * 3.5f + ny * 2.5f) + 1f) * 0.15f
                         (flow * 0.85f + detail).coerceIn(0f, 1f)
                     }
-                    else -> { // Dual mountain peaks with continuous connecting saddle
-                        val p1X = cols * 0.35f
-                        val p1Y = rows * 0.38f
-                        val p2X = cols * 0.68f
-                        val p2Y = rows * 0.62f
-
-                        val dx1 = (c - p1X) / (cols * 0.4f)
-                        val dy1 = (r - p1Y) / (cols * 0.4f)
-                        val d1 = sqrt(dx1 * dx1 + dy1 * dy1)
-
-                        val dx2 = (c - p2X) / (cols * 0.4f)
-                        val dy2 = (r - p2Y) / (cols * 0.4f)
-                        val d2 = sqrt(dx2 * dx2 + dy2 * dy2)
-
-                        val peak1 = (1f - d1).coerceAtLeast(0f)
-                        val peak2 = (1f - d2).coerceAtLeast(0f)
-                        val saddle = sin(nx * 1.8f + ny * 1.8f) * 0.18f * warp
-                        (peak1 * 0.55f + peak2 * 0.55f + saddle + 0.1f).coerceIn(0f, 1f)
+                    else -> { // Continuous geological ridge and saddle flow spanning full screen
+                        val wX = x * freq * 1.4f + sin(ny * 1.5f) * warp
+                        val wY = y * freq * 1.4f + cos(nx * 1.5f) * warp
+                        val saddle = (sin(wX) * cos(wY) + 1f) * 0.5f
+                        val crossRidge = (sin(wX * 0.7f - wY * 0.7f) + 1f) * 0.25f
+                        (saddle * 0.75f + crossRidge).coerceIn(0f, 1f)
                     }
                 }
 

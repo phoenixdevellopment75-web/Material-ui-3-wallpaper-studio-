@@ -39,6 +39,17 @@ class AiKeyStorage(context: Context) {
         return getApiKey(provider).isNotBlank()
     }
 
+    fun getSelectedModel(provider: AiProvider): String {
+        val modelKey = "${provider.name}_MODEL"
+        val stored = prefs.getString(modelKey, "") ?: ""
+        return if (stored.isNotBlank()) stored else provider.defaultModel
+    }
+
+    fun saveSelectedModel(provider: AiProvider, model: String) {
+        val modelKey = "${provider.name}_MODEL"
+        prefs.edit().putString(modelKey, model.trim()).apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "wallpaper_studio_ai_keys"
 
