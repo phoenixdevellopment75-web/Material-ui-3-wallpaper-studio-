@@ -45,14 +45,15 @@ object StackedPillsRenderer : WallpaperRenderer {
         // 2. Determine number of pills: 8 to 10 rungs
         val pillCount = (8 + (params.complexity * 1.5f).toInt()).coerceIn(8, 10)
 
-        // Sizing & Spacing
-        val pillWidth = width * 0.76f * params.scale.coerceIn(0.7f, 1.25f)
-        val pillHeight = (height * 0.052f) * (1f + (params.scale - 1f) * 0.2f)
-        val cornerRadius = pillHeight / 2f // Pure stadium capsule caps
+        // Sizing & Spacing from user-configurable tune parameters
+        val pillWidth = width * params.pillWidth.coerceIn(0.4f, 1.0f) * params.scale.coerceIn(0.6f, 1.4f)
+        val pillHeight = height * params.pillHeight.coerceIn(0.02f, 0.15f)
+        val maxCap = minOf(pillWidth / 2f, pillHeight / 2f)
+        val cornerRadius = maxCap * params.pillCurvature.coerceIn(0.1f, 1.0f)
 
-        // Overlapping stride (pillHeight minus slight overlap so each pill casts shadow onto the next)
-        val verticalOverlap = 4f * (height / 800f)
-        val stepY = pillHeight - verticalOverlap
+        // Spacing stride between rungs
+        val verticalSpacing = height * params.pillSpacing.coerceIn(0.0f, 0.08f)
+        val stepY = pillHeight + verticalSpacing
 
         val totalStackHeight = pillHeight + (pillCount - 1) * stepY
         val startY = (height - totalStackHeight) / 2f

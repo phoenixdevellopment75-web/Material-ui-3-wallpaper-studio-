@@ -531,6 +531,24 @@ object PaletteEngine {
                 PRESET_DESERT_CONTOUR,
                 PRESET_MINERAL_BLUE
             )
+            com.example.engine.WallpaperPatternType.BAUHAUS_SEMICIRCLE -> listOf(
+                PRESET_WARM_CLAY,
+                PRESET_TERRACOTTA_RIDGE,
+                PRESET_COBALT_MATRIX,
+                PRESET_CREAM_PARCHMENT
+            )
+            com.example.engine.WallpaperPatternType.FLUTED_ARCHES -> listOf(
+                PRESET_TERRACOTTA_RIDGE,
+                PRESET_DESERT_CONTOUR,
+                PRESET_WARM_OCHRE_STACK,
+                PRESET_SLATE_CONTOUR
+            )
+            com.example.engine.WallpaperPatternType.LAVA_BLOB -> listOf(
+                PRESET_SUNSET_HORIZON,
+                PRESET_WARM_SUNSET,
+                PRESET_SKY_LILAC,
+                PRESET_DEEP_OCEAN
+            )
             com.example.engine.WallpaperPatternType.STUDIO -> listOf(
                 PRESET_SKY_LILAC,
                 PRESET_SAGE_MONOLITH,

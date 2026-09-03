@@ -54,11 +54,8 @@ fun <T> FloatingPillTabRow(
 
     Surface(
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.85f),
-        border = BorderStroke(
-            width = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
-        ),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = null,
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 2.dp)
@@ -102,7 +99,7 @@ fun <T> FloatingPillTabRow(
 
                 Box(
                     modifier = Modifier
-                        .height(44.dp)
+                        .height(36.dp)
                         .scale(animatedScale)
                         .clip(CircleShape)
                         .background(containerColor)
@@ -112,7 +109,7 @@ fun <T> FloatingPillTabRow(
                             role = Role.Tab,
                             onClick = { onTabSelected(tab) }
                         )
-                        .padding(horizontal = 14.dp),
+                        .padding(horizontal = 16.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Row(

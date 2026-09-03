@@ -69,6 +69,7 @@ fun WallpaperCanvasPreview(
     aspectRatioPreset: AspectRatioPreset,
     isFullscreen: Boolean,
     showLauncherMockup: Boolean,
+    paletteColors: List<Color> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     var scale by remember { mutableFloatStateOf(1f) }
@@ -82,42 +83,28 @@ fun WallpaperCanvasPreview(
     Box(
         modifier = modifier
             .testTag("wallpaper_preview_container")
-            .background(Color.Black),
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+            .transformable(state = transformState),
         contentAlignment = Alignment.Center
     ) {
-        // Container with target aspect ratio
-        Box(
-            modifier = Modifier
-                .then(
-                    if (isFullscreen) Modifier.fillMaxSize()
-                    else Modifier
-                        .fillMaxSize(0.94f)
-                        .aspectRatio(aspectRatioPreset.ratio)
-                        .clip(RoundedCornerShape(28.dp))
-                        .border(2.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(28.dp))
-                        .shadow(16.dp, RoundedCornerShape(28.dp))
-                )
-                .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                .transformable(state = transformState),
-            contentAlignment = Alignment.Center
-        ) {
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = "Procedural Wallpaper Output",
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer(
-                            scaleX = scale,
-                            scaleY = scale,
-                            translationX = offset.x,
-                            translationY = offset.y
-                        ),
-                    contentScale = ContentScale.Crop
-                )
-            }
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = "Procedural Wallpaper Output",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer(
+                        scaleX = scale,
+                        scaleY = scale,
+                        translationX = offset.x,
+                        translationY = offset.y
+                    ),
+                contentScale = ContentScale.Crop
+            )
+        }
 
-            // Real-time calculation spinner overlay
+            // Real-time calculation M3 shape morph loader overlay
             AnimatedVisibility(
                 visible = isGenerating,
                 enter = fadeIn(),
@@ -127,17 +114,28 @@ fun WallpaperCanvasPreview(
                 Box(
                     modifier = Modifier
                         .padding(16.dp)
-                        .size(36.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .background(Color.Black.copy(alpha = 0.65f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.5.dp,
-                        color = Color.White
+                    M3ShapeMorphLoader(
+                        size = 26.dp,
+                        paletteColors = paletteColors,
+                        primaryColor = MaterialTheme.colorScheme.primary,
+                        secondaryColor = MaterialTheme.colorScheme.tertiary,
+                        showGlow = false
                     )
                 }
+            }
+
+            if (bitmap == null && isGenerating) {
+                M3ShapeMorphLoader(
+                    size = 64.dp,
+                    paletteColors = paletteColors,
+                    primaryColor = MaterialTheme.colorScheme.primary,
+                    secondaryColor = MaterialTheme.colorScheme.tertiary
+                )
             }
 
             // Mock Android Launcher Overlay (Clock, widgets, search pill, dock apps)
@@ -149,11 +147,10 @@ fun WallpaperCanvasPreview(
                 LauncherMockupOverlay()
             }
         }
-    }
 }
 
 @Composable
-private fun LauncherMockupOverlay() {
+fun LauncherMockupOverlay() {
     val currentTime = remember {
         val sdf = SimpleDateFormat("h:mm", Locale.getDefault())
         sdf.format(Date())

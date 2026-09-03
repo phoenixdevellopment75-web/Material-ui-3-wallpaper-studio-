@@ -187,34 +187,33 @@ object ProceduralM3Assembler {
 
         when (type) {
             CustomShapeType.CLOVER_4 -> {
-                // Official 4-Leaf Clover: 4 tangent rounded lobes around center
-                val r = minOf(halfW, halfH)
-                val lobeR = r * 0.48f
-                val offset = r * 0.38f
-                val rectTop = RectF(cx - lobeR, cy - offset - lobeR, cx + lobeR, cy - offset + lobeR)
-                val rectRight = RectF(cx + offset - lobeR, cy - lobeR, cx + offset + lobeR, cy + lobeR)
-                val rectBottom = RectF(cx - lobeR, cy + offset - lobeR, cx + lobeR, cy + offset + lobeR)
-                val rectLeft = RectF(cx - offset - lobeR, cy - lobeR, cx - offset + lobeR, cy + lobeR)
-
-                path.addOval(rectTop, Path.Direction.CW)
-                path.addOval(rectRight, Path.Direction.CW)
-                path.addOval(rectBottom, Path.Direction.CW)
-                path.addOval(rectLeft, Path.Direction.CW)
-                path.addCircle(cx, cy, lobeR * 0.72f, Path.Direction.CW)
+                // Official 4-Leaf Clover: Unified single compound vector path with zero internal wireframes
+                return StudioCloverShape.build4LeafCloverPath(cx, cy, w, h)
             }
 
             CustomShapeType.CLOVER_8 -> {
-                // Official 8-Leaf Clover Bloom: 8 rounded radial lobes
-                val r = minOf(halfW, halfH)
-                val lobeR = r * 0.36f
-                val offset = r * 0.52f
-                for (i in 0 until 8) {
-                    val angle = (i * 45f) * (PI.toFloat() / 180f)
-                    val lx = cx + offset * cos(angle)
-                    val ly = cy + offset * sin(angle)
-                    path.addCircle(lx, ly, lobeR, Path.Direction.CW)
+                // Official 8-Leaf Clover Bloom: Unified single compound vector path with zero internal wireframes
+                return StudioCloverShape.build8LeafCloverPath(cx, cy, w, h)
+            }
+
+            CustomShapeType.SUNNY_BADGE -> {
+                // Sunny Badge: 16-point sunburst star cookie badge
+                val radius = minOf(halfW, halfH)
+                val innerR = radius * 0.78f
+                val points = 32
+                for (i in 0 until points) {
+                    val angle = (i * (360f / points)) * (PI.toFloat() / 180f)
+                    val r = if (i % 2 == 0) radius else innerR
+                    val px = cx + r * cos(angle)
+                    val py = cy + r * sin(angle)
+                    if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
                 }
-                path.addCircle(cx, cy, r * 0.45f, Path.Direction.CW)
+                path.close()
+            }
+
+            CustomShapeType.COOKIE -> {
+                // Material 3 Flower Cookie: 10-scallop cookie badge
+                buildScallopPath(path, cx, cy, minOf(halfW, halfH), lobes = 10)
             }
 
             CustomShapeType.SCALLOP_6 -> {

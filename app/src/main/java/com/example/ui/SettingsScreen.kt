@@ -155,7 +155,8 @@ data class AppSettingsState(
     val antiAliasingEnabled: Boolean = true,
     val subSamplingEnabled: Boolean = false,
     val hapticStrength: HapticStrength = HapticStrength.FIRM,
-    val hapticsEnabled: Boolean = true
+    val hapticsEnabled: Boolean = true,
+    val disableBlurEffects: Boolean = false
 )
 
 enum class SettingsTab(val label: String, val icon: ImageVector) {
@@ -172,11 +173,12 @@ fun SettingsScreen(
     settings: AppSettingsState,
     onUpdateSettings: (AppSettingsState) -> Unit,
     onResetDefaults: () -> Unit,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    initialTab: SettingsTab = SettingsTab.PERSONALIZATION
 ) {
     val haptics = LocalHapticFeedback.current
     val context = LocalContext.current
-    var selectedTab by remember { mutableStateOf(SettingsTab.PERSONALIZATION) }
+    var selectedTab by remember { mutableStateOf(initialTab) }
     val tabs = SettingsTab.entries
 
     LaunchedEffect(Unit) {
@@ -188,7 +190,7 @@ fun SettingsScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Settings & Preferences",
+                        text = "Settings",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -349,6 +351,40 @@ private fun PersonalizationTabContent(
             }
         }
 
+        // Disable Blur Effects Toggle (PixelPlayer-style Battery & GPU optimization)
+        SettingsCard(title = "Display & Blur Effects") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text(
+                        text = "Disable Blur Effects",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Turn off blur effects to save battery and GPU resources",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = settings.disableBlurEffects,
+                    onCheckedChange = { isChecked ->
+                        if (settings.hapticStrength != HapticStrength.OFF) {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        }
+                        onUpdateSettings(settings.copy(disableBlurEffects = isChecked))
+                    },
+                    modifier = Modifier.testTag("toggle_disable_blur_effects")
+                )
+            }
+        }
+
         // Static Theme Presets (Active when Monet is OFF)
         if (!settings.dynamicMonetEnabled) {
             SettingsCard(title = "Curated Minimalist Theme") {
@@ -363,7 +399,7 @@ private fun PersonalizationTabContent(
                         Surface(
                             shape = RoundedCornerShape(16.dp),
                             color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
-                            border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+                            border = null,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp))
@@ -465,7 +501,7 @@ private fun PersonalizationTabContent(
                     Surface(
                         shape = RoundedCornerShape(16.dp),
                         color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
-                        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+                        border = null,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(16.dp))
@@ -844,7 +880,7 @@ private fun AiIntegrationTabContent(
                         Surface(
                             shape = RoundedCornerShape(16.dp),
                             color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            border = null,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -939,7 +975,7 @@ private fun AdvancedTabContent(
                     Surface(
                         shape = RoundedCornerShape(16.dp),
                         color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
-                        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+                        border = null,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(16.dp))
@@ -994,7 +1030,7 @@ private fun AdvancedTabContent(
                     Surface(
                         shape = RoundedCornerShape(16.dp),
                         color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
-                        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+                        border = null,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(16.dp))

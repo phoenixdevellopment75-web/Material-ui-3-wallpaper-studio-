@@ -1,9 +1,10 @@
 package com.example.ui
 
+import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.Color
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ai.AiGenerationState
 import com.example.ai.AiKeyStorage
@@ -45,6 +46,8 @@ data class WallpaperUiState(
     val showPaletteSheet: Boolean = false,
     val showAddShapeSheet: Boolean = false,
     val showColorPickerModal: Boolean = false,
+    val showCustomPaletteBuilder: Boolean = false,
+    val userCustomPalettes: List<ColorPalette> = emptyList(),
     val activeColorStopIndex: Int = 0,
     val selectedShapeId: String? = null,
     val isExporting: Boolean = false,
@@ -63,13 +66,14 @@ data class WallpaperUiState(
     val aiTestMood: String = "Warm Nordic Clay"
 )
 
-class WallpaperViewModel : ViewModel() {
+class WallpaperViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(WallpaperUiState())
     val uiState: StateFlow<WallpaperUiState> = _uiState.asStateFlow()
 
     val aiService = AiPaletteService()
-    private var aiKeyStorage: AiKeyStorage? = null
+    private val aiKeyStorage: AiKeyStorage = AiKeyStorage.getInstance(application)
+    private val settingsRepository: SettingsDataStoreRepository = SettingsDataStoreRepository(application)
 
     private var previewRenderJob: Job? = null
     private var lastRenderParams: WallpaperParams? = null
@@ -81,7 +85,8 @@ class WallpaperViewModel : ViewModel() {
         for (provider in AiProvider.entries) {
             val defaults = aiService.getDefaultModels(provider)
             initialModels[provider] = defaults
-            initialSelected[provider] = defaults.firstOrNull() ?: provider.defaultModel
+            val stored = aiKeyStorage.getSelectedModel(provider)
+            initialSelected[provider] = if (stored.isNotBlank()) stored else (defaults.firstOrNull() ?: provider.defaultModel)
         }
         _uiState.update {
             it.copy(
@@ -89,23 +94,38 @@ class WallpaperViewModel : ViewModel() {
                 selectedModels = initialSelected
             )
         }
+
+        // Collect persistent settings from DataStore
+        viewModelScope.launch {
+            settingsRepository.settingsFlow.collect { savedSettings ->
+                _uiState.update { it.copy(settings = savedSettings) }
+            }
+        }
+
+        // Collect custom palettes from DataStore
+        viewModelScope.launch {
+            settingsRepository.customPalettesFlow.collect { palettes ->
+                _uiState.update { it.copy(userCustomPalettes = palettes) }
+            }
+        }
+
+        // Collect last selected style
+        viewModelScope.launch {
+            settingsRepository.lastSelectedStyleFlow.collect { styleName ->
+                if (!styleName.isNullOrBlank()) {
+                    val found = WallpaperPatternType.entries.find { it.name == styleName || it.displayName == styleName }
+                    if (found != null && _uiState.value.params.patternType != found) {
+                        setPatternType(found, persist = false)
+                    }
+                }
+            }
+        }
+
         generatePreview(debounceMs = 0)
     }
 
     fun initAiKeyStorage(context: Context) {
-        if (aiKeyStorage == null) {
-            val storage = AiKeyStorage.getInstance(context)
-            aiKeyStorage = storage
-            // Restore stored models
-            val restoredSelected = _uiState.value.selectedModels.toMutableMap()
-            for (provider in AiProvider.entries) {
-                val stored = storage.getSelectedModel(provider)
-                if (stored.isNotBlank()) {
-                    restoredSelected[provider] = stored
-                }
-            }
-            _uiState.update { it.copy(selectedModels = restoredSelected) }
-        }
+        // Kept for backward compatibility if called from activity
     }
 
     fun getApiKey(provider: AiProvider): String {
@@ -232,6 +252,64 @@ class WallpaperViewModel : ViewModel() {
 
     fun updateSettings(settings: AppSettingsState) {
         _uiState.update { it.copy(settings = settings) }
+        viewModelScope.launch {
+            settingsRepository.saveSettings(settings)
+        }
+    }
+
+    fun showCustomPaletteBuilder(show: Boolean) {
+        _uiState.update { it.copy(showCustomPaletteBuilder = show) }
+    }
+
+    fun saveCustomPalette(palette: ColorPalette) {
+        val current = _uiState.value.userCustomPalettes
+        val updated = listOf(palette) + current.filterNot { it.id == palette.id }
+        _uiState.update {
+            it.copy(
+                userCustomPalettes = updated,
+                snackbarMessage = "Custom palette '${palette.name}' saved!",
+                isSuccessMessage = true
+            )
+        }
+        setPalette(palette)
+        viewModelScope.launch {
+            settingsRepository.saveCustomPalettes(updated)
+        }
+    }
+
+    fun deleteCustomPalette(paletteId: String) {
+        val current = _uiState.value.userCustomPalettes
+        val updated = current.filterNot { it.id == paletteId }
+        _uiState.update {
+            it.copy(
+                userCustomPalettes = updated,
+                snackbarMessage = "Custom palette removed",
+                isSuccessMessage = true
+            )
+        }
+        viewModelScope.launch {
+            settingsRepository.saveCustomPalettes(updated)
+        }
+    }
+
+    fun commitShapePosition(id: String, normX: Float, normY: Float) {
+        updateShapePosition(id, normX, normY)
+    }
+
+    fun commitShapeScale(id: String, normW: Float) {
+        val currentShapes = _uiState.value.params.customShapes
+        val updated = currentShapes.map {
+            if (it.id == id) {
+                val newW = normW.coerceIn(0.10f, 1.4f)
+                val newH = if (it.type.isProportional1to1) newW else (it.normalizedHeight * (newW / it.normalizedWidth)).coerceIn(0.10f, 1.4f)
+                it.copy(normalizedWidth = newW, normalizedHeight = newH)
+            } else it
+        }
+        updateParams { it.copy(customShapes = updated) }
+    }
+
+    fun commitShapeRotation(id: String, deg: Float) {
+        setShapeRotation(id, deg)
     }
 
     fun openSettings(open: Boolean) {
@@ -409,14 +487,14 @@ class WallpaperViewModel : ViewModel() {
                 selectedShapeId = null
             )
         }
-        generatePreview(debounceMs = 0)
+        generatePreview(debounceMs = 0, minDurationMs = 1800L)
     }
 
-    fun updateParams(transform: (WallpaperParams) -> WallpaperParams) {
+    fun updateParams(minDurationMs: Long = 0L, transform: (WallpaperParams) -> WallpaperParams) {
         _uiState.update { current ->
             current.copy(params = transform(current.params))
         }
-        generatePreview(debounceMs = 50)
+        generatePreview(debounceMs = 50, minDurationMs = minDurationMs)
     }
 
     fun onGenerateOrShuffleClicked() {
@@ -429,19 +507,40 @@ class WallpaperViewModel : ViewModel() {
 
     fun randomizeSeed() {
         val newSeed = (MathUtils.FastRandom(System.nanoTime()).nextFloat() * 1000000).toLong()
-        updateParams { it.copy(seed = newSeed) }
+        updateParams(minDurationMs = 1800L) { it.copy(seed = newSeed) }
     }
 
-    fun setPatternType(type: WallpaperPatternType) {
+    fun setPatternType(type: WallpaperPatternType, persist: Boolean = true) {
         val stylePalette = PaletteEngine.getDefaultPaletteForPattern(type)
         _uiState.update { it.copy(selectedShapeId = null) }
-        updateParams {
+        updateParams(minDurationMs = 1800L) {
             it.copy(
                 patternType = type,
                 subTypeIndex = 0,
                 palette = stylePalette
             )
         }
+        if (persist) {
+            viewModelScope.launch {
+                settingsRepository.saveLastSelectedStyle(type.name)
+            }
+        }
+    }
+
+    fun setPillWidth(width: Float) {
+        updateParams { it.copy(pillWidth = width.coerceIn(0.4f, 1.0f)) }
+    }
+
+    fun setPillHeight(height: Float) {
+        updateParams { it.copy(pillHeight = height.coerceIn(0.02f, 0.15f)) }
+    }
+
+    fun setPillSpacing(spacing: Float) {
+        updateParams { it.copy(pillSpacing = spacing.coerceIn(0.0f, 0.08f)) }
+    }
+
+    fun setPillCurvature(curvature: Float) {
+        updateParams { it.copy(pillCurvature = curvature.coerceIn(0.1f, 1.0f)) }
     }
 
     fun setSubType(index: Int) {
@@ -627,10 +726,11 @@ class WallpaperViewModel : ViewModel() {
         }
     }
 
-    private fun generatePreview(debounceMs: Long) {
+    private fun generatePreview(debounceMs: Long, minDurationMs: Long = 0L) {
         previewRenderJob?.cancel()
         previewRenderJob = viewModelScope.launch {
             if (debounceMs > 0) delay(debounceMs)
+            val startTime = System.currentTimeMillis()
             _uiState.update { it.copy(isGeneratingPreview = true) }
 
             val currentParams = _uiState.value.params
@@ -640,6 +740,14 @@ class WallpaperViewModel : ViewModel() {
 
             val bitmap = withContext(Dispatchers.Default) {
                 ProceduralRenderer.renderToBitmap(previewWidth, previewHeight, currentParams)
+            }
+
+            if (minDurationMs > 0L) {
+                val elapsed = System.currentTimeMillis() - startTime
+                val remaining = minDurationMs - elapsed
+                if (remaining > 0) {
+                    delay(remaining)
+                }
             }
 
             _uiState.update {

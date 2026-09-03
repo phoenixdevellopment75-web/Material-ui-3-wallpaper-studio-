@@ -35,6 +35,9 @@ object ProceduralRenderer {
             WallpaperPatternType.STACKED_PILLS -> StackedPillsRenderer.render(bitmap, params)
             WallpaperPatternType.DOT_GRID -> DotGridRenderer.render(bitmap, params)
             WallpaperPatternType.CONTOURS -> TopographicRenderer.render(bitmap, params)
+            WallpaperPatternType.BAUHAUS_SEMICIRCLE -> BauhausSemicircleRenderer.render(bitmap, params)
+            WallpaperPatternType.FLUTED_ARCHES -> FlutedArchesRenderer.render(bitmap, params)
+            WallpaperPatternType.LAVA_BLOB -> LavaBlobRenderer.render(bitmap, params)
             WallpaperPatternType.STUDIO -> ProceduralM3Assembler.renderCustomShapes(bitmap, params)
         }
     }

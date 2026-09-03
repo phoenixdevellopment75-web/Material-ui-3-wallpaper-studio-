@@ -16,6 +16,8 @@ enum class CustomShapeType(
 ) {
     CLOVER_4("4-Leaf Clover", "Material 3 expressive 4-lobe clover with filleted radii", true),
     CLOVER_8("8-Leaf Clover", "Expressive 8-lobe clover bloom", true),
+    SUNNY_BADGE("Sunny Badge", "Expressive sunburst star cookie badge", true),
+    COOKIE("Cookie", "Scalloped perimeter flower cookie badge", true),
     SCALLOP_12("12-Point Scallop", "12-sided flower cookie badge", true),
     SCALLOP_8("8-Point Scallop", "8-sided rounded scallop badge", true),
     SCALLOP_6("6-Point Scallop", "6-sided soft scallop badge", true),
@@ -83,6 +85,21 @@ enum class WallpaperPatternType(
         description = "Continuous edge-to-edge scalar contour lines over soft organic paper textures",
         subTypes = listOf("Alpine Iso", "Ridge Lines", "Oceanic Trench", "Basin", "Continuous Iso")
     ),
+    BAUHAUS_SEMICIRCLE(
+        displayName = "Bauhaus Semicircle",
+        description = "Alternating bands, clean architectural semi-circles, and stark high-contrast geometry",
+        subTypes = listOf("Bauhaus Primary", "Constructivist Arch", "Geometric Vault", "Minimal Half-Moon", "Studio Bauhaus")
+    ),
+    FLUTED_ARCHES(
+        displayName = "Fluted Arches",
+        description = "Romanesque arches, fluted columns, depth gradients, and stepped architectural frames",
+        subTypes = listOf("Romanesque Arcade", "Fluted Monolith", "Colonnade Hall", "Stepped Portal", "Terra Flutes")
+    ),
+    LAVA_BLOB(
+        displayName = "Lava Blob",
+        description = "Smooth organic Metaball physics, fluid field blending, and specular highlight reflections",
+        subTypes = listOf("Liquid Lava", "Floating Blobs", "Mercury Drops", "Thermal Chamber", "Bioluminescent Goo")
+    ),
     STUDIO(
         displayName = "Studio",
         description = "Interactive touch canvas to freely place, drag, scale, rotate, and style Material 3 shapes",
@@ -126,6 +143,10 @@ data class WallpaperParams(
     val isWireframe: Boolean = false,   // Wireframe / outline emphasis vs filled render
     val contrast: Float = 1.0f,         // 0.5f .. 2.0f
     val brightness: Float = 0.0f,       // -0.5f .. 0.5f
+    val pillWidth: Float = 0.72f,       // Stacked pills width ratio (0.4f .. 1.0f)
+    val pillHeight: Float = 0.065f,     // Stacked pills height ratio (0.02f .. 0.15f)
+    val pillSpacing: Float = 0.025f,    // Stacked pills vertical spacing (0.0f .. 0.08f)
+    val pillCurvature: Float = 1.0f,    // Stacked pills corner roundness (0.1f .. 1.0f)
     val palette: ColorPalette = PaletteEngine.PRESET_ALPINE_MIST,
     val aspectRatio: AspectRatioPreset = AspectRatioPreset.PHONE_TALL,
     val customShapes: List<CustomCanvasShape> = defaultInitialShapes()
