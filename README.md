@@ -53,7 +53,7 @@ This project is in active beta testing. While the core UI and rendering pipeline
 
 Download the latest pre-compiled build directly from GitHub:
 
-1. Go to the [Beta v2.4.1 Release Page](https://github.com/phoenixdevellopment75-web/Material-ui-3-wallpaper-studio-/releases/tag/Wallpaper-Studio-betav2.4.1).
+1. Go to the [Beta v2.5.0 Release Page](https://github.com/phoenixdevellopment75-web/Material-ui-3-wallpaper-studio-/releases/tag/Wallpaper-Studio-betav2.4.1).
 2. Download `app-debug.apk` (or `app-release.apk`).
 3. Install and run on any device running **Android 12 (API 31)** or higher.
 
