@@ -1,79 +1,56 @@
+<div align="center">
+
 # ✦ Wallpaper Studio
 
-> A tactile, math-driven procedural wallpaper engine and interactive canvas studio built natively for Android using Jetpack Compose and Material 3 Expressive.
+**A tactile, math-driven procedural wallpaper engine and interactive canvas studio built natively for Android.**
 
-[![Release](https://img.shields.io/badge/Release-v2.4.1--beta-blue.svg)](https://github.com/phoenixdevellopment75-web/Material-ui-3-wallpaper-studio-/releases/tag/Wallpaper-Studio-betav2.4.1)
-[![Platform](https://img.shields.io/badge/Platform-Android%2012%2B-green.svg)](https://android.com)
-[![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](LICENSE)
+[![Release](https://img.shields.io/badge/Release-v2.6.0--beta-6366f1?style=for-the-badge&logo=github&logoColor=white)](https://github.com/phoenixdevellopment75-web/Material-ui-3-wallpaper-studio-/releases/tag/Wallpaper-Studio-betav2.6.0)
+[![Android](https://img.shields.io/badge/Android-12%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://android.com)
+[![Jetpack Compose](https://img.shields.io/badge/UI-Compose%20%26%20M3E-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
+[![License](https://img.shields.io/badge/License-Apache%202.0-F97316?style=for-the-badge)](LICENSE)
+
+<p align="center">
+  <b>100% On-Device Math</b> • <b>Zero Remote Latency</b> • <b>Battery Efficient</b> • <b>Dynamic Theming</b>
+</p>
 
 ---
+
+</div>
 
 ## 🎨 Overview
 
-**Wallpaper Studio** delivers resolution-independent, vector-based wallpapers generated 100% on-device. Instead of loading remote raster images or relying on slow cloud AI image models, Wallpaper Studio calculates geometric forms directly on hardware-accelerated Skia 2D Canvas. It is optimized to stay lightweight, battery-friendly, and responsive on devices with 4GB RAM.
+**Wallpaper Studio** delivers ultra-sharp, resolution-independent vector wallpapers generated completely on-device. 
+
+Bypassing remote asset fetching, bloated image caches, and slow cloud models, Wallpaper Studio computes complex trigonometric geometries and fluid dynamics directly on hardware-accelerated **Skia 2D Canvas**. The entire pipeline is heavily profiled to maintain smooth 60/120 FPS performance and a tiny memory footprint—running seamlessly even on modest 4GB RAM hardware.
 
 ---
 
-## 📱 Features
+## ✨ Key Highlights
 
-### 📐 Procedural Vector Engines
-* **Bauhaus Semicircles:** Disciplined $4 \times 7$ grid layout rendering crisp semicircles, quadrant arcs, and solid disks.
-* **Fluted Labyrinth Arches:** Concentric, non-intersecting quarter-arcs with tangent architectural line tracks.
-* **Harmonic Waves & Ridges:** Smooth parametric S-curves and atmospheric mountain contours.
-* **Topographic Contours:** Organic elevation maps with customizable stroke weights.
-* **Liquid Camo / Lava:** Flowing cubic Bézier ribbons with continuous tangent curves.
-
-### 🛠 Freeform Studio Canvas
-* **Material 3 Geometry Primitives:** Place and manipulate dynamic tokens including Clovers, Sunburst badges, Semicircles, and Squircles via `androidx.graphics.shapes`.
-* **Shape Transformation:** Touch-driven 360° rotation, proportion-locked scaling, and layer reordering.
-* **Shape Tuning & Optics:** Dedicated sliders for shape opacity (0% to 100%), elevation drop shadows, and soft-edge glow.
-* **Auto-Arrange:** Procedurally generate balanced, non-overlapping shape layouts with a single tap while keeping every shape editable.
-* **Tactile Floating Dock:** Ergonomic 4-capsule bottom navigation with fluid spring physics inspired by PixelPlayer.
-
-### 🌗 System & Visual Integration
-* **Material You Dynamic Theming:** Automatically derives harmonious HCT tonal palettes from your system wallpaper (Android 12+ Monet).
-* **Manual Theme Mode:** Seamlessly switch between System Default, Pure Light, and Deep Dark modes.
-* **Adaptive Themed Icon:** Native 4-point astroid star token with Android 13+ monochrome tinting support.
-* **Tactile Return Motion:** Nested push/pop spring transitions with depth scaling.
-* **Optional AI Color Synthesis:** 100% offline and private by default, with an optional BYOK (Bring-Your-Own-Key) toggle for Gemini, OpenAI, or OpenRouter palette generation.
+- **⚡ Hardware-Accelerated Math:** Real-time procedural rendering via Skia graphics pipelines with zero network overhead.
+- **🪄 Material 3 Expressive UI:** Built with modern Jetpack Compose foundations, tactile spring physics, and dynamic color extraction (`Monet`).
+- **📐 Infinite Resolution:** Vector and formula-based rendering guarantees zero pixelation on any screen density or aspect ratio.
+- **🔋 Battery-Conscious Engine:** Generates on-demand without background wake-locks or unnecessary CPU polling.
 
 ---
 
-## ⚠️ Beta v2.4.1 Status & Known Issues
+## 🛠️ Tech Stack & Architecture
 
-This project is in active beta testing. While the core UI and rendering pipeline are fully operational, the following items are currently being refined:
-
-* **Generator Palettes:** A few procedural engines (Lava and Fluted Arches) may occasionally default to baseline tones; full real-time palette reactivity is being finalized.
-* **Studio Slider Tuning:** Opacity and soft-edge glow values on complex multi-segment shapes may exhibit slight visual clipping under certain Android GPU drivers.
-* **In-App Blur Settings:** Experimental runtime blur filters have been temporarily replaced with solid, high-contrast Material 3 opaque surfaces to prevent UI ghosting.
-
----
-
-## 📲 Quick Install
-
-Download the latest pre-compiled build directly from GitHub:
-
-1. Go to the [Beta v2.5.0 Release Page](https://github.com/phoenixdevellopment75-web/Material-ui-3-wallpaper-studio-/releases/tag/Wallpaper-Studio-betav2.4.1).
-2. Download `app-debug.apk` (or `app-release.apk`).
-3. Install and run on any device running **Android 12 (API 31)** or higher.
+- **UI Layer:** Jetpack Compose, Material Design 3 Expressive, Compose Animation primitives.
+- **Graphics Pipeline:** Android Canvas (`drawPath`, `drawVertices`), hardware Skia shading.
+- **Architecture:** Modern Android Architecture (MVVM / MVI) with unidirectional data flow (UDF).
+- **Target SDK:** Android 12+ (API Level 31 and above).
 
 ---
 
-## 🏗 Building Locally
+## 🚀 Getting Started
 
-### Prerequisites
-* **Android Studio:** Ladybug (2024.2.1) or newer
-* **JDK:** Version 21 (Temurin or JetBrains Runtime)
-* **Gradle:** 8.8+ / Android Gradle Plugin 8.8+
+### Download APK
+Grab the latest build directly from GitHub Releases:
+- **Latest Release:** [Wallpaper Studio v2.6.0-beta](https://github.com/phoenixdevellopment75-web/Material-ui-3-wallpaper-studio-/releases/tag/Wallpaper-Studio-betav2.6.0)
 
-### Setup Commands
+### Clone & Build Locally
 ```bash
-# Clone the repository
 git clone [https://github.com/phoenixdevellopment75-web/Material-ui-3-wallpaper-studio-.git](https://github.com/phoenixdevellopment75-web/Material-ui-3-wallpaper-studio-.git)
 cd Material-ui-3-wallpaper-studio-
-
-# Make gradlew executable
-chmod +x gradlew
-
-# Build debug APK
 ./gradlew assembleDebug
