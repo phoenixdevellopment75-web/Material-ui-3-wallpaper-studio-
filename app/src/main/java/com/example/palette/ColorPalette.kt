@@ -15,6 +15,16 @@ enum class GradientType(val displayName: String) {
 }
 
 /**
+ * Filter categories for categorized palette sheet.
+ */
+enum class PaletteCategory(val displayName: String) {
+    ALL("All"),
+    DYNAMIC_MONET("Dynamic Monet"),
+    PASTEL_LIGHT("Pastel Light"),
+    MOODY_DARK("Moody Dark")
+}
+
+/**
  * Represents an ordered color palette with interpolation and shading helpers.
  */
 data class ColorPalette(
@@ -24,6 +34,8 @@ data class ColorPalette(
     val gradientType: GradientType = GradientType.LINEAR,
     val isDarkBackground: Boolean = true
 ) {
+    val stops: List<Color> get() = colors
+
     init {
         require(colors.isNotEmpty()) { "Color palette must have at least 1 color" }
     }
@@ -462,6 +474,18 @@ object PaletteEngine {
     )
 
     val allPresets = listOf(
+        // Curated Light Mode & High-Luminance Pastels (L* >= 85)
+        PaletteLibrary.MATCHA_LATTE,
+        PaletteLibrary.STRAWBERRY_GELATO,
+        PaletteLibrary.NORDIC_CLOUD,
+        PaletteLibrary.WARM_BISCUIT,
+        PaletteLibrary.LILAC_HAZE,
+        PaletteLibrary.SOLAR_CREAM,
+        PaletteLibrary.MATCHA_CREAM,
+        PaletteLibrary.STRAWBERRY_MILK,
+        PaletteLibrary.NORDIC_MIST,
+        PaletteLibrary.SAND_DUNE_CLAY,
+        PaletteLibrary.PAPER_WHITE_INDIGO,
         // Mountain Presets
         PRESET_ALPINE_MIST,
         PRESET_NORDIC_PINE,
@@ -497,6 +521,30 @@ object PaletteEngine {
     )
 
     /**
+     * Returns palettes filtered by curated category tab.
+     */
+    fun getPalettesByCategory(category: PaletteCategory): List<ColorPalette> {
+        return when (category) {
+            PaletteCategory.ALL -> allPresets
+            PaletteCategory.DYNAMIC_MONET -> {
+                allPresets.filter {
+                    it.id.contains("monet") || it.id.contains("matrix") ||
+                    it.id.contains("lilac") || it.id.contains("sky") ||
+                    it.id.contains("sunset") || it.id.contains("mineral")
+                }
+            }
+            PaletteCategory.PASTEL_LIGHT -> {
+                PaletteLibrary.lightModePalettes
+            }
+            PaletteCategory.MOODY_DARK -> {
+                allPresets.filter {
+                    it.isDarkBackground && !PaletteLibrary.lightModePalettes.any { lp -> lp.id == it.id }
+                }
+            }
+        }
+    }
+
+    /**
      * Returns curated palettes tailored specifically for the active wallpaper style.
      */
     fun getPalettesForPattern(patternType: com.example.engine.WallpaperPatternType): List<ColorPalette> {
@@ -509,7 +557,9 @@ object PaletteEngine {
             )
             com.example.engine.WallpaperPatternType.WAVES -> listOf(
                 PRESET_SAGE_MONOLITH,
+                PaletteLibrary.MATCHA_CREAM,
                 PRESET_COASTAL_DRIFT,
+                PaletteLibrary.NORDIC_MIST,
                 PRESET_MATCHA_LATTE,
                 PRESET_DEEP_OCEAN
             )
@@ -533,13 +583,17 @@ object PaletteEngine {
             )
             com.example.engine.WallpaperPatternType.BAUHAUS_SEMICIRCLE -> listOf(
                 PRESET_WARM_CLAY,
+                PaletteLibrary.PAPER_WHITE_INDIGO,
                 PRESET_TERRACOTTA_RIDGE,
+                PaletteLibrary.SAND_DUNE_CLAY,
                 PRESET_COBALT_MATRIX,
                 PRESET_CREAM_PARCHMENT
             )
             com.example.engine.WallpaperPatternType.FLUTED_ARCHES -> listOf(
                 PRESET_TERRACOTTA_RIDGE,
+                PaletteLibrary.SAND_DUNE_CLAY,
                 PRESET_DESERT_CONTOUR,
+                PaletteLibrary.MATCHA_CREAM,
                 PRESET_WARM_OCHRE_STACK,
                 PRESET_SLATE_CONTOUR
             )
@@ -551,10 +605,38 @@ object PaletteEngine {
             )
             com.example.engine.WallpaperPatternType.STUDIO -> listOf(
                 PRESET_SKY_LILAC,
+                PaletteLibrary.MATCHA_CREAM,
+                PaletteLibrary.STRAWBERRY_MILK,
                 PRESET_SAGE_MONOLITH,
+                PaletteLibrary.SAND_DUNE_CLAY,
+                PaletteLibrary.PAPER_WHITE_INDIGO,
                 PRESET_WARM_CLAY,
                 PRESET_BLUSH_OCHRE,
                 PRESET_ALPINE_MIST
+            )
+            com.example.engine.WallpaperPatternType.GRIDS -> listOf(
+                PaletteLibrary.PAPER_WHITE_INDIGO,
+                PRESET_OLED_OBSIDIAN,
+                PRESET_SLATE_CONTOUR,
+                PRESET_ALPINE_MIST
+            )
+            com.example.engine.WallpaperPatternType.SLICES -> listOf(
+                PRESET_TERRACOTTA_RIDGE,
+                PRESET_WARM_SUNSET,
+                PRESET_SUNSET_HORIZON,
+                PRESET_NORDIC_PINE
+            )
+            com.example.engine.WallpaperPatternType.CROSS_CURVES -> listOf(
+                PRESET_SAGE_MONOLITH,
+                PRESET_SKY_LILAC,
+                PRESET_COASTAL_DRIFT,
+                PRESET_DEEP_OCEAN
+            )
+            com.example.engine.WallpaperPatternType.PAPER_RIDGES -> listOf(
+                PRESET_CREAM_PARCHMENT,
+                PaletteLibrary.SAND_DUNE_CLAY,
+                PRESET_DESERT_CONTOUR,
+                PRESET_WARM_CLAY
             )
         }
     }

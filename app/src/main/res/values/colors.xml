@@ -9,6 +9,7 @@
     <color name="white">#FFFFFFFF</color>
     
     <!-- Material 3 Adaptive Icon Tokens -->
+    <color name="ic_launcher_background">#FFF3EFEA</color>
     <color name="md_theme_surfaceContainer">#FFF3EFEA</color>
     <color name="md_theme_primary">#FF7A4E38</color>
     <color name="md_theme_primaryContainer">#FFDF9B7C</color>

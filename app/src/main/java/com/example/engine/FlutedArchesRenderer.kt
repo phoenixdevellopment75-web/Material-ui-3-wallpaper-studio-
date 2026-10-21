@@ -3,10 +3,18 @@ package com.example.engine
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.Path
 import android.graphics.RectF
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.dp
 import com.example.math.MathUtils
+import com.example.palette.ColorPalette
 import kotlin.math.ceil
 
 /**
@@ -15,11 +23,11 @@ import kotlin.math.ceil
  * Clean, disciplined non-intersecting concentric arch modules:
  * - Eliminates all diagonal criss-crosses and spider-web moiré artifacts.
  * - Divides canvas into a clean grid of strictly square modules (W_cell = H_cell = S).
- * - In each module, draws either horizontal parallel lines OR vertical concentric quarter-arches
- *   (or vertical parallel lines).
- * - All lines terminate precisely at cell boundary edges at uniform track fractions
- *   so adjacent cells link together seamlessly without overlapping line collisions.
- * - Single crisp stroke color on textured bone white paper (#F7F4EE).
+ * - In each module, draws either horizontal parallel lines, vertical parallel lines,
+ *   or concentric quarter-arches anchored exclusively at one of the 4 cell corners.
+ * - Parallel line tracks cleanly meet and merge with adjacent concentric quarter-arcs
+ *   at cell boundary lines.
+ * - Stroke color binds dynamically to palette.stops[1] or onSurface, with background binding to palette.stops[0].
  */
 object FlutedArchesRenderer : WallpaperRenderer {
 
@@ -28,127 +36,224 @@ object FlutedArchesRenderer : WallpaperRenderer {
         val height = bitmap.height.toFloat()
         val canvas = Canvas(bitmap)
 
-        // 1. Dual-tone palette matching exact specifications
-        val (bgArgb, strokeArgb) = when (params.subTypeIndex % 5) {
-            0 -> Pair(
-                0xFFF7F4EE.toInt(), // Textured bone white paper (#F7F4EE)
-                0xFF546A55.toInt()  // Vintage sage green (#546A55)
-            )
-            1 -> Pair(
-                0xFFF6F3EC.toInt(), // Warm chalk
-                0xFF2D2E2E.toInt()  // Architectural warm charcoal
-            )
-            2 -> Pair(
-                0xFFF8F2E8.toInt(), // Cream linen
-                0xFFB85D43.toInt()  // Terracotta rust
-            )
-            3 -> Pair(
-                0xFFF4F5F2.toInt(), // Bone paper
-                0xFF3B5249.toInt()  // Deep spruce green
-            )
-            else -> {
-                val bg = params.palette.colors.first().toArgb()
-                val fg = if (params.palette.colors.size > 2) {
-                    params.palette.colors[2].toArgb()
-                } else {
-                    params.palette.colors.last().toArgb()
-                }
-                Pair(bg, fg)
-            }
-        }
+        // 1. Dynamic palette bindings: stroke binds to stops[1], background to stops[0]
+        val background = params.palette.stops.firstOrNull() ?: Color(0xFFF7F4EE)
+        val strokeColor = params.palette.stops.getOrElse(1) { Color(0xFF546A55) }
 
         // Draw flat clean paper background
         val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = bgArgb
+            color = background.toArgb()
             style = Paint.Style.FILL
         }
         canvas.drawRect(0f, 0f, width, height, bgPaint)
 
-        // 2. Setup clean grid of strictly square modules (W_cell = H_cell)
+        // 2. Setup clean grid of strictly square modules (W_cell = H_cell = S)
         val cols = 4
         val cellSize = width / cols.toFloat()
         val rows = ceil(height / cellSize).toInt()
 
-        // 5 parallel tracks per module
-        val tracks = 5
-
-        // Stroke width scaled to display density, using BUTT cap to terminate precisely at cell boundaries
+        // Stroke width uniform 1.5dp scaled to display density, using BUTT cap
         val density = width / 380f
-        val strokeWidthPx = (2.0f * density).coerceIn(3.0f, 6.5f)
+        val strokeWidthPx = 1.5f * density
 
         val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = strokeArgb
+            color = strokeColor.toArgb()
             style = Paint.Style.STROKE
             strokeWidth = strokeWidthPx
             strokeCap = Paint.Cap.BUTT
             strokeJoin = Paint.Join.MITER
         }
 
-        val masterPath = Path()
+        // Reusable RectF for zero-allocation rendering pass
+        val arcRect = RectF()
+        val numTracks = 4
 
-        // 3. Render clean, non-intersecting modules in each square cell
+        // 3. Render disciplined, non-intersecting modules in each cell with strict clipping
         for (r in 0 until rows) {
             for (c in 0 until cols) {
                 val left = c * cellSize
                 val top = r * cellSize
-                val right = left + cellSize
-                val bottom = top + cellSize
+                val right = if (c == cols - 1) width else (left + cellSize)
+                val bottom = if (r == rows - 1 && (top + cellSize) >= height) height else (top + cellSize)
 
                 val cellSeed = params.seed + (r * 31L + c * 59L) * 1063L
                 val rng = MathUtils.FastRandom(cellSeed)
-                val moduleType = rng.nextInt(4)
 
-                when (moduleType) {
+                canvas.save()
+                canvas.clipRect(left, top, right, bottom)
+
+                val option = rng.nextInt(6)
+
+                when (option) {
                     0 -> {
-                        // Module 0: Horizontal parallel lines terminating squarely at x = left and x = right
-                        for (k in 0 until tracks) {
-                            val frac = (k + 0.5f) / tracks
-                            val y = top + frac * cellSize
-                            masterPath.moveTo(left, y)
-                            masterPath.lineTo(right, y)
+                        // Parallel horizontal lines at track offsets (k - 0.5f) / numTracks * cellSize
+                        for (k in 1..numTracks) {
+                            val trackOffset = ((k - 0.5f) / numTracks.toFloat()) * cellSize
+                            val y = top + trackOffset
+                            canvas.drawLine(left, y, right, y, linePaint)
                         }
                     }
                     1 -> {
-                        // Module 1: Vertical concentric quarter-arches (Top-Left & Bottom-Right)
-                        // All arches have identical radius in x and y because W_cell = H_cell
-                        for (k in 0 until tracks) {
-                            val frac = (k + 0.5f) / tracks
-                            val radTL = frac * cellSize
-                            val rectTL = RectF(left - radTL, top - radTL, left + radTL, top + radTL)
-                            masterPath.arcTo(rectTL, 0f, 90f, false)
-
-                            val radBR = (1f - frac) * cellSize
-                            val rectBR = RectF(right - radBR, bottom - radBR, right + radBR, bottom + radBR)
-                            masterPath.arcTo(rectBR, 180f, 90f, false)
+                        // Parallel vertical lines at track offsets (k - 0.5f) / numTracks * cellSize
+                        for (k in 1..numTracks) {
+                            val trackOffset = ((k - 0.5f) / numTracks.toFloat()) * cellSize
+                            val x = left + trackOffset
+                            canvas.drawLine(x, top, x, bottom, linePaint)
                         }
                     }
                     2 -> {
-                        // Module 2: Vertical concentric quarter-arches (Top-Right & Bottom-Left)
-                        for (k in 0 until tracks) {
-                            val frac = (k + 0.5f) / tracks
-                            val radTR = frac * cellSize
-                            val rectTR = RectF(right - radTR, top - radTR, right + radTR, top + radTR)
-                            masterPath.arcTo(rectTR, 90f, 90f, false)
-
-                            val radBL = (1f - frac) * cellSize
-                            val rectBL = RectF(left - radBL, bottom - radBL, left + radBL, bottom + radBL)
-                            masterPath.arcTo(rectBL, 270f, 90f, false)
+                        // Concentric quarter-arcs anchored at Top-Left
+                        for (k in 1..numTracks) {
+                            val rad = ((k - 0.5f) / numTracks.toFloat()) * cellSize
+                            arcRect.set(left - rad, top - rad, left + rad, top + rad)
+                            canvas.drawArc(arcRect, 0f, 90f, false, linePaint)
+                        }
+                    }
+                    3 -> {
+                        // Concentric quarter-arcs anchored at Top-Right
+                        for (k in 1..numTracks) {
+                            val rad = ((k - 0.5f) / numTracks.toFloat()) * cellSize
+                            arcRect.set(right - rad, top - rad, right + rad, top + rad)
+                            canvas.drawArc(arcRect, 90f, 90f, false, linePaint)
+                        }
+                    }
+                    4 -> {
+                        // Concentric quarter-arcs anchored at Bottom-Right
+                        for (k in 1..numTracks) {
+                            val rad = ((k - 0.5f) / numTracks.toFloat()) * cellSize
+                            arcRect.set(right - rad, bottom - rad, right + rad, bottom + rad)
+                            canvas.drawArc(arcRect, 180f, 90f, false, linePaint)
                         }
                     }
                     else -> {
-                        // Module 3: Vertical parallel lines terminating squarely at y = top and y = bottom
-                        for (k in 0 until tracks) {
-                            val frac = (k + 0.5f) / tracks
-                            val x = left + frac * cellSize
-                            masterPath.moveTo(x, top)
-                            masterPath.lineTo(x, bottom)
+                        // Concentric quarter-arcs anchored at Bottom-Left
+                        for (k in 1..numTracks) {
+                            val rad = ((k - 0.5f) / numTracks.toFloat()) * cellSize
+                            arcRect.set(left - rad, bottom - rad, left + rad, bottom + rad)
+                            canvas.drawArc(arcRect, 270f, 90f, false, linePaint)
+                        }
+                    }
+                }
+
+                canvas.restore()
+            }
+        }
+    }
+}
+
+/**
+ * Jetpack Compose DrawScope extension for rendering Fluted Arches.
+ */
+fun DrawScope.drawFlutedArches(
+    palette: ColorPalette,
+    seed: Long
+) {
+    val background = palette.stops.firstOrNull() ?: Color(0xFFF7F4EE)
+    val strokeColor = palette.stops.getOrElse(1) { Color(0xFF546A55) }
+
+    drawRect(color = background)
+
+    val cols = 4
+    val cellSize = size.width / cols
+    val rows = ceil(size.height / cellSize).toInt()
+    val numTracks = 4
+    val strokeStyle = Stroke(width = 1.5.dp.toPx())
+
+    for (r in 0 until rows) {
+        for (c in 0 until cols) {
+            val left = c * cellSize
+            val top = r * cellSize
+            val right = left + cellSize
+            val bottom = top + cellSize
+
+            val cellSeed = seed + (r * 31L + c * 59L) * 1063L
+            val rng = MathUtils.FastRandom(cellSeed)
+
+            clipRect(left, top, right, bottom) {
+                val option = rng.nextInt(6)
+                when (option) {
+                    0 -> {
+                        for (k in 1..numTracks) {
+                            val trackOffset = ((k - 0.5f) / numTracks) * cellSize
+                            val y = top + trackOffset
+                            drawLine(
+                                color = strokeColor,
+                                start = Offset(left, y),
+                                end = Offset(right, y),
+                                strokeWidth = 1.5.dp.toPx()
+                            )
+                        }
+                    }
+                    1 -> {
+                        for (k in 1..numTracks) {
+                            val trackOffset = ((k - 0.5f) / numTracks) * cellSize
+                            val x = left + trackOffset
+                            drawLine(
+                                color = strokeColor,
+                                start = Offset(x, top),
+                                end = Offset(x, bottom),
+                                strokeWidth = 1.5.dp.toPx()
+                            )
+                        }
+                    }
+                    2 -> {
+                        for (k in 1..numTracks) {
+                            val rad = ((k - 0.5f) / numTracks) * cellSize
+                            drawArc(
+                                color = strokeColor,
+                                startAngle = 0f,
+                                sweepAngle = 90f,
+                                useCenter = false,
+                                topLeft = Offset(left - rad, top - rad),
+                                size = Size(rad * 2, rad * 2),
+                                style = strokeStyle
+                            )
+                        }
+                    }
+                    3 -> {
+                        for (k in 1..numTracks) {
+                            val rad = ((k - 0.5f) / numTracks) * cellSize
+                            drawArc(
+                                color = strokeColor,
+                                startAngle = 90f,
+                                sweepAngle = 90f,
+                                useCenter = false,
+                                topLeft = Offset(right - rad, top - rad),
+                                size = Size(rad * 2, rad * 2),
+                                style = strokeStyle
+                            )
+                        }
+                    }
+                    4 -> {
+                        for (k in 1..numTracks) {
+                            val rad = ((k - 0.5f) / numTracks) * cellSize
+                            drawArc(
+                                color = strokeColor,
+                                startAngle = 180f,
+                                sweepAngle = 90f,
+                                useCenter = false,
+                                topLeft = Offset(right - rad, bottom - rad),
+                                size = Size(rad * 2, rad * 2),
+                                style = strokeStyle
+                            )
+                        }
+                    }
+                    else -> {
+                        for (k in 1..numTracks) {
+                            val rad = ((k - 0.5f) / numTracks) * cellSize
+                            drawArc(
+                                color = strokeColor,
+                                startAngle = 270f,
+                                sweepAngle = 90f,
+                                useCenter = false,
+                                topLeft = Offset(left - rad, bottom - rad),
+                                size = Size(rad * 2, rad * 2),
+                                style = strokeStyle
+                            )
                         }
                     }
                 }
             }
         }
-
-        // Draw master non-intersecting line labyrinth
-        canvas.drawPath(masterPath, linePaint)
     }
 }

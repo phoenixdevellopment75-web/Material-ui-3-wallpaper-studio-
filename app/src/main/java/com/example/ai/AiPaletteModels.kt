@@ -12,7 +12,7 @@ enum class AiProvider(
     GEMINI(
         displayName = "Google Gemini",
         endpointDescription = "generativelanguage.googleapis.com",
-        defaultModel = "gemini-1.5-flash",
+        defaultModel = "gemini-2.5-flash",
         keyPlaceholder = "AIzaSy..."
     ),
     OPENAI(
@@ -43,6 +43,21 @@ enum class DaylightContext(val label: String, val iconDescription: String) {
     MIDNIGHT_OLED("Midnight OLED", "Deep contrast true black and bioluminescent accents")
 }
 
+data class AiPaletteCandidate(
+    val name: String,
+    val description: String = "",
+    val hexCodes: List<String>,
+    val colors: List<Color>
+) {
+    fun toColorPalette(): ColorPalette {
+        return ColorPalette(
+            id = "ai_${name.lowercase().replace(" ", "_")}_${System.currentTimeMillis()}",
+            name = "AI: $name",
+            colors = colors
+        )
+    }
+}
+
 data class GeneratedAiPalette(
     val paletteName: String,
     val hexCodes: List<String>,
@@ -61,5 +76,6 @@ sealed class AiGenerationState {
     object Idle : AiGenerationState()
     object Loading : AiGenerationState()
     data class Success(val palette: GeneratedAiPalette) : AiGenerationState()
+    data class CandidatesSuccess(val candidates: List<AiPaletteCandidate>) : AiGenerationState()
     data class Error(val message: String) : AiGenerationState()
 }

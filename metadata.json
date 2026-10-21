@@ -1,7 +1,8 @@
 {
-  "name": "Wallpaper Studio",
-  "description": "Production-grade procedural geometric and mathematical wallpaper generator powered by deterministic algorithms, Material You dynamic color, and native offscreen canvas rendering.",
+  "name": "Remix Wallpaper Studio",
+  "description": "Create stunning, procedural wallpapers using pure mathematical algorithms and Material 3 design for an elegant, lightweight Android experience.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
-

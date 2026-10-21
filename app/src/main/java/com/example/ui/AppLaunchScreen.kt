@@ -72,25 +72,16 @@ fun AppLaunchScreen(
             verticalArrangement = Arrangement.Center
         ) {
             // Material 3 Expressive Intro Morph Loader
-            M3IntroMorphLoader(size = 96.dp)
+            M3IntroMorphLoader(size = 80.dp)
 
-            Spacer(modifier = Modifier.height(28.dp))
-
-            Text(
-                text = "Wallpaper Studio",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                letterSpacing = 0.5.sp
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "Procedural Vector Engine",
+                text = "Loading...",
                 style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                letterSpacing = 0.25.sp
+                letterSpacing = 0.5.sp
             )
         }
     }

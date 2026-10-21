@@ -12,45 +12,117 @@ import java.util.UUID
 enum class CustomShapeType(
     val displayName: String,
     val iconDescription: String,
-    val isProportional1to1: Boolean = true
+    val isProportional1to1: Boolean = true,
+    val category: ShapeCategory = ShapeCategory.CORE_PRIMITIVES,
+    val m3Token: M3ShapeToken = M3ShapeToken.CIRCLE
 ) {
-    CLOVER_4("4-Leaf Clover", "Material 3 expressive 4-lobe clover with filleted radii", true),
-    CLOVER_8("8-Leaf Clover", "Expressive 8-lobe clover bloom", true),
-    SUNNY_BADGE("Sunny Badge", "Expressive sunburst star cookie badge", true),
-    COOKIE("Cookie", "Scalloped perimeter flower cookie badge", true),
-    SCALLOP_12("12-Point Scallop", "12-sided flower cookie badge", true),
-    SCALLOP_8("8-Point Scallop", "8-sided rounded scallop badge", true),
-    SCALLOP_6("6-Point Scallop", "6-sided soft scallop badge", true),
-    M3_ARCH("M3 Arch", "Pure tangent rounded arch with vertical drop walls", false),
-    SEMICIRCLE("Semicircle", "Pure tangent half-circle dome", false),
-    PUFFY_DIAMOND("Puffy Diamond", "Curved puffy diamond with rounded corners", true),
-    GEM("M3 Gem", "Filleted polygonal faceted gem", true),
-    BUN("M3 Bun", "Smooth rounded oblong bun shape", false),
-    STADIUM_PILL("Stadium Pill", "Smooth elongated capsule with semi-circle caps", false),
-    SLANTED_SQUIRCLE("Slanted Squircle", "Angled superellipse with soft curvature", true),
-    PEBBLE("Organic Pebble", "Asymmetrical continuous organic curvature", true),
-    TORUS_RING("Circle & Torus", "Pure circular ring token", true)
+    // 1. Core Primitives
+    CIRCLE("Circle", "Pure circular token", true, ShapeCategory.CORE_PRIMITIVES, M3ShapeToken.CIRCLE),
+    SQUARE_SQUIRCLE("Square / Squircle", "Continuous curvature superellipse", true, ShapeCategory.CORE_PRIMITIVES, M3ShapeToken.SQUARE),
+    SLANTED_SQUIRCLE("Slanted", "Slanted architectural parallelogram", true, ShapeCategory.CORE_PRIMITIVES, M3ShapeToken.SLANTED),
+    M3_ARCH("M3 Arch", "Pure tangent rounded arch with vertical drop walls", false, ShapeCategory.CORE_PRIMITIVES, M3ShapeToken.ARCH),
+    SEMICIRCLE("Semicircle", "Pure tangent half-circle dome", false, ShapeCategory.CORE_PRIMITIVES, M3ShapeToken.SEMICIRCLE),
+    OVAL("Oval", "M3 expressive rounded oblong oval", false, ShapeCategory.CORE_PRIMITIVES, M3ShapeToken.OVAL),
+    STADIUM_PILL("Pill", "Smooth elongated capsule with semi-circle caps", false, ShapeCategory.CORE_PRIMITIVES, M3ShapeToken.PILL),
+    TRIANGLE("Triangle", "Equilateral triangle with filleted corners", true, ShapeCategory.CORE_PRIMITIVES, M3ShapeToken.TRIANGLE),
+    ARROW("Arrow", "Directional chevron indicator", true, ShapeCategory.CORE_PRIMITIVES, M3ShapeToken.ARROW),
+    FAN("Fan", "90-degree fan wedge with rounded outer arc", true, ShapeCategory.CORE_PRIMITIVES, M3ShapeToken.FAN),
+    DIAMOND("Diamond", "Filleted 4-point diamond", true, ShapeCategory.CORE_PRIMITIVES, M3ShapeToken.DIAMOND),
+    CLAMSHELL("Clamshell", "Multi-fluted scallop fan", true, ShapeCategory.CORE_PRIMITIVES, M3ShapeToken.CLAMSHELL),
+    PENTAGON("Pentagon", "Filleted 5-sided polygon", true, ShapeCategory.CORE_PRIMITIVES, M3ShapeToken.PENTAGON),
+    GEM("M3 Gem", "Filleted polygonal faceted gem", true, ShapeCategory.CORE_PRIMITIVES, M3ShapeToken.GEM),
+    PEBBLE("Organic Pebble", "Asymmetrical continuous organic curvature", true, ShapeCategory.CORE_PRIMITIVES, M3ShapeToken.COOKIE_4),
+    TORUS_RING("Circle & Torus", "Pure circular ring token", true, ShapeCategory.CORE_PRIMITIVES, M3ShapeToken.CIRCLE),
+
+    // 2. Cookies & Sunbursts
+    VERY_SUNNY("Very Sunny", "16-point expressive sunburst", true, ShapeCategory.COOKIES_SUNBURSTS, M3ShapeToken.VERY_SUNNY),
+    SUNNY_BADGE("Sunny Badge", "Expressive sunburst star cookie badge", true, ShapeCategory.COOKIES_SUNBURSTS, M3ShapeToken.SUNNY),
+    COOKIE("Cookie", "Scalloped perimeter flower cookie badge", true, ShapeCategory.COOKIES_SUNBURSTS, M3ShapeToken.COOKIE_4),
+    COOKIE_4("4-Sided Cookie", "4-sided rounded flower cookie", true, ShapeCategory.COOKIES_SUNBURSTS, M3ShapeToken.COOKIE_4),
+    COOKIE_6("6-Sided Cookie", "6-sided soft scallop badge", true, ShapeCategory.COOKIES_SUNBURSTS, M3ShapeToken.COOKIE_6),
+    SCALLOP_6("6-Point Scallop", "6-sided soft scallop badge", true, ShapeCategory.COOKIES_SUNBURSTS, M3ShapeToken.COOKIE_6),
+    COOKIE_7("7-Sided Cookie", "7-sided rounded scallop badge", true, ShapeCategory.COOKIES_SUNBURSTS, M3ShapeToken.COOKIE_7),
+    SCALLOP_8("8-Point Scallop", "8-sided rounded scallop badge", true, ShapeCategory.COOKIES_SUNBURSTS, M3ShapeToken.COOKIE_7),
+    COOKIE_9("9-Sided Cookie", "9-sided rounded flower cookie", true, ShapeCategory.COOKIES_SUNBURSTS, M3ShapeToken.COOKIE_9),
+    COOKIE_12("12-Sided Cookie", "12-sided flower cookie badge", true, ShapeCategory.COOKIES_SUNBURSTS, M3ShapeToken.COOKIE_12),
+    SCALLOP_12("12-Point Scallop", "12-sided flower cookie badge", true, ShapeCategory.COOKIES_SUNBURSTS, M3ShapeToken.COOKIE_12),
+
+    // 3. Blooms & Bursts
+    CLOVER_4("4-Leaf Clover", "Material 3 expressive 4-lobe clover with filleted radii", true, ShapeCategory.BLOOMS_BURSTS, M3ShapeToken.CLOVER_4),
+    CLOVER_8("8-Leaf Clover", "Expressive 8-lobe clover bloom", true, ShapeCategory.BLOOMS_BURSTS, M3ShapeToken.CLOVER_8),
+    BURST("Burst", "Sharp 12-point energetic burst", true, ShapeCategory.BLOOMS_BURSTS, M3ShapeToken.BURST),
+    SOFT_BURST("Soft Burst", "Softened 10-point radial burst", true, ShapeCategory.BLOOMS_BURSTS, M3ShapeToken.SOFT_BURST),
+    BOOM("Boom", "Dramatic 14-point comic boom badge", true, ShapeCategory.BLOOMS_BURSTS, M3ShapeToken.BOOM),
+    SOFT_BOOM("Soft Boom", "Softened 12-point expressive boom", true, ShapeCategory.BLOOMS_BURSTS, M3ShapeToken.SOFT_BOOM),
+    FLOWER("Flower", "6-petal rounded bloom", true, ShapeCategory.BLOOMS_BURSTS, M3ShapeToken.FLOWER),
+    PUFFY("Puffy", "Multi-puff organic cloud badge", true, ShapeCategory.BLOOMS_BURSTS, M3ShapeToken.PUFFY),
+    PUFFY_DIAMOND("Puffy Diamond", "Curved puffy diamond with rounded corners", true, ShapeCategory.BLOOMS_BURSTS, M3ShapeToken.PUFFY_DIAMOND),
+
+    // 4. Specialty Tokens
+    GHOSTISH("Ghost-ish", "Playful curved dome with scalloped wavy foot", true, ShapeCategory.SPECIALTY, M3ShapeToken.GHOSTISH),
+    PIXEL_CIRCLE("Pixel Circle", "Stepped quantized 8-bit circle token", true, ShapeCategory.SPECIALTY, M3ShapeToken.PIXEL_CIRCLE),
+    PIXEL_TRIANGLE("Pixel Triangle", "Stepped quantized 8-bit triangle token", true, ShapeCategory.SPECIALTY, M3ShapeToken.PIXEL_TRIANGLE),
+    BUN("M3 Bun", "Smooth rounded oblong bun shape", false, ShapeCategory.SPECIALTY, M3ShapeToken.BUN),
+    HEART("Heart", "Filleted expressive heart token", true, ShapeCategory.SPECIALTY, M3ShapeToken.HEART)
 }
 
 /**
  * An individual interactive shape in the Studio Canvas.
  */
+typealias StudioShape = CustomCanvasShape
+
 data class CustomCanvasShape(
-    val id: String = UUID.randomUUID().toString(),
+    override val id: String = UUID.randomUUID().toString(),
     val type: CustomShapeType = CustomShapeType.CLOVER_4,
-    val normalizedX: Float = 0.5f,       // 0.0 .. 1.0 (relative to canvas width)
-    val normalizedY: Float = 0.5f,       // 0.0 .. 1.0 (relative to canvas height)
+    override val normalizedX: Float = 0.5f,       // 0.0 .. 1.0 (relative to canvas width)
+    override val normalizedY: Float = 0.5f,       // 0.0 .. 1.0 (relative to canvas height)
     val normalizedWidth: Float = 0.38f,  // 0.1 .. 1.2
     val normalizedHeight: Float = 0.38f, // 0.1 .. 1.2
     val rotationDeg: Float = 0.0f,       // 0.0 .. 360.0
     val colorIndex: Int = 0,             // Palette color index (0 .. size-1)
     val customColorHex: Long? = null,    // Optional override color
-    val opacity: Float = 1.0f,           // 0.2 .. 1.0
-    val zIndex: Int = 0,                 // Layer ordering
+    override val opacity: Float = 1.0f,           // 0.0 .. 1.0
+    val shadowRadius: Float = 16.0f,     // 0.0 .. 32.0 dp (drop shadow blur radius)
+    val blurRadius: Float = 0.0f,        // 0.0 .. 32.0 dp (soft edge / atmospheric glow)
+    override val zIndex: Int = 0,                 // Layer ordering
     val scallopLobes: Int = 8,           // 6, 8, 10, or 12 lobes
     val isWireframe: Boolean = false,
-    val strokeWidth: Float = 2.5f
-)
+    val strokeWidth: Float = 2.5f,
+    val lockProportions: Boolean = false
+) : StudioItem {
+    override val scale: Float get() = normalizedWidth
+    override val scaleX: Float get() = normalizedWidth
+    override val scaleY: Float get() = normalizedHeight
+    override val rotation: Float get() = rotationDeg
+    val shadowElevation: Float get() = shadowRadius
+    val glowRadius: Float get() = blurRadius
+
+    override fun contains(
+        touchPoint: androidx.compose.ui.geometry.Offset,
+        canvasW: Float,
+        canvasH: Float,
+        baseDim: Float,
+        globalScale: Float
+    ): Boolean {
+        val cx = normalizedX * canvasW
+        val cy = normalizedY * canvasH
+        val scaleFactor = globalScale * baseDim
+        val shapeW = normalizedWidth * scaleFactor
+        val shapeH = if (lockProportions || type == CustomShapeType.CIRCLE) shapeW else normalizedHeight * scaleFactor
+
+        val rad = -Math.toRadians(rotationDeg.toDouble())
+        val cos = kotlin.math.cos(rad).toFloat()
+        val sin = kotlin.math.sin(rad).toFloat()
+        val dx = touchPoint.x - cx
+        val dy = touchPoint.y - cy
+        val localX = dx * cos - dy * sin
+        val localY = dx * sin + dy * cos
+
+        val halfW = (shapeW / 2f) + 20f
+        val halfH = (shapeH / 2f) + 20f
+        return localX in -halfW..halfW && localY in -halfH..halfH
+    }
+}
 
 /**
  * Curated Procedural Pattern Families with clean, direct naming.
@@ -71,7 +143,7 @@ enum class WallpaperPatternType(
         subTypes = listOf("S-Bands", "Dune Drift", "Cascade", "Duo Stream", "Celadon Flow")
     ),
     STACKED_PILLS(
-        displayName = "Stacked Pills",
+        displayName = "Pills",
         description = "Centered vertical stack of horizontal stadium pills with tonal ramp",
         subTypes = listOf("Warm Ochre Stack", "Sunset Horizon", "Nordic Pine Stack", "Crimson Plum", "Minimal Rungs")
     ),
@@ -86,17 +158,17 @@ enum class WallpaperPatternType(
         subTypes = listOf("Alpine Iso", "Ridge Lines", "Oceanic Trench", "Basin", "Continuous Iso")
     ),
     BAUHAUS_SEMICIRCLE(
-        displayName = "Bauhaus Semicircle",
+        displayName = "Blocks",
         description = "Alternating bands, clean architectural semi-circles, and stark high-contrast geometry",
         subTypes = listOf("Bauhaus Primary", "Constructivist Arch", "Geometric Vault", "Minimal Half-Moon", "Studio Bauhaus")
     ),
     FLUTED_ARCHES(
-        displayName = "Fluted Arches",
+        displayName = "Arches",
         description = "Romanesque arches, fluted columns, depth gradients, and stepped architectural frames",
         subTypes = listOf("Romanesque Arcade", "Fluted Monolith", "Colonnade Hall", "Stepped Portal", "Terra Flutes")
     ),
     LAVA_BLOB(
-        displayName = "Lava Blob",
+        displayName = "Liquid",
         description = "Smooth organic Metaball physics, fluid field blending, and specular highlight reflections",
         subTypes = listOf("Liquid Lava", "Floating Blobs", "Mercury Drops", "Thermal Chamber", "Bioluminescent Goo")
     ),
@@ -104,6 +176,26 @@ enum class WallpaperPatternType(
         displayName = "Studio",
         description = "Interactive touch canvas to freely place, drag, scale, rotate, and style Material 3 shapes",
         subTypes = listOf("Freeform Studio", "Golden Ratio", "Minimalist Duo", "Pebble Zen", "Clover Badge")
+    ),
+    GRIDS(
+        displayName = "Grids",
+        description = "Minimalist multi-scale architectural grid lines, intersecting accents, and coordinate ticks",
+        subTypes = listOf("Mono Grid", "Blueprint", "Metric 10", "Cross Grid", "Zen Coordinate")
+    ),
+    SLICES(
+        displayName = "Slices",
+        description = "Angular geometric planar diagonal cuts, layered color divisions, and sharp diagonal paper slices",
+        subTypes = listOf("Diagonal Cut", "Tri-Slice", "Prism Blade", "Folded Slice", "Dual Angle")
+    ),
+    CROSS_CURVES(
+        displayName = "Cross Curves",
+        description = "Interlocking bi-directional bezier wave ribbons and cross-curved woven flow bands",
+        subTypes = listOf("Woven Flow", "Sine Crossing", "Dual Ribbon", "Braid Curve", "Zen Weave")
+    ),
+    PAPER_RIDGES(
+        displayName = "Paper",
+        description = "Tactile embossed stepped paper folds, geometric shadow creases, and origami topography ridges",
+        subTypes = listOf("Origami Fold", "Stepped Crease", "Prism Ridge", "V-Fold", "Shadow Ridge")
     )
 }
 
@@ -149,7 +241,11 @@ data class WallpaperParams(
     val pillCurvature: Float = 1.0f,    // Stacked pills corner roundness (0.1f .. 1.0f)
     val palette: ColorPalette = PaletteEngine.PRESET_ALPINE_MIST,
     val aspectRatio: AspectRatioPreset = AspectRatioPreset.PHONE_TALL,
-    val customShapes: List<CustomCanvasShape> = defaultInitialShapes()
+    val filmGrain: Float = 0.0f,        // Film Grain Noise intensity (0.0f .. 1.0f)
+    val customShapes: List<CustomCanvasShape> = defaultInitialShapes(),
+    val customTexts: List<StudioTextLayer> = emptyList(),
+    val customImages: List<StudioImageLayer> = emptyList(),
+    val backgroundConfig: CanvasBackgroundConfig = CanvasBackgroundConfig()
 ) {
     val subTypeName: String
         get() = patternType.subTypes.getOrElse(subTypeIndex) { patternType.subTypes.first() }

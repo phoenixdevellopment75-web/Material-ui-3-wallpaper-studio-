@@ -24,10 +24,13 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -81,6 +84,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asAndroidPath
+import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -96,6 +100,7 @@ import androidx.compose.ui.unit.sp
 import com.example.engine.AspectRatioPreset
 import com.example.engine.CustomCanvasShape
 import com.example.engine.CustomShapeType
+import com.example.engine.ShapeCategory
 import com.example.engine.ProceduralM3Assembler
 import com.example.engine.WallpaperParams
 import com.example.palette.ColorPalette
@@ -176,7 +181,7 @@ fun CustomStudioCanvas(
                                 .firstOrNull { shape ->
                                     val scaleFactor = params.scale * baseDim
                                     val shapeW = shape.normalizedWidth * scaleFactor
-                                    val shapeH = if (shape.type.isProportional1to1) {
+                                    val shapeH = if (shape.lockProportions || shape.type == CustomShapeType.CIRCLE) {
                                         shape.normalizedWidth * scaleFactor
                                     } else {
                                         shape.normalizedHeight * scaleFactor
@@ -227,8 +232,8 @@ fun CustomStudioCanvas(
                     val cy = shape.normalizedY * size.height
                     val scaleFactor = params.scale * baseDim
                     val w = shape.normalizedWidth * scaleFactor
-                    val h = if (shape.type.isProportional1to1) {
-                        shape.normalizedWidth * scaleFactor // Strictly 1:1 proportional!
+                    val h = if (shape.lockProportions || shape.type == CustomShapeType.CIRCLE) {
+                        shape.normalizedWidth * scaleFactor
                     } else {
                         shape.normalizedHeight * scaleFactor
                     }
@@ -541,11 +546,24 @@ fun AddShapeBottomSheet(
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var selectedCategory by remember { mutableStateOf<ShapeCategory?>(null) }
+
+    val filteredShapes = remember(selectedCategory) {
+        if (selectedCategory == null) {
+            CustomShapeType.entries
+        } else {
+            CustomShapeType.entries.filter { it.category == selectedCategory }
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 6.dp,
+        scrimColor = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.4f),
+        contentWindowInsets = { WindowInsets.navigationBars },
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 0.dp, bottomEnd = 0.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -553,76 +571,127 @@ fun AddShapeBottomSheet(
                 .fillMaxWidth()
                 .wrapContentHeight()
                 .navigationBarsPadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 12.dp),
+                .padding(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "Add Material 3 Shape",
+                text = "Add Material 3 Expressive Shape",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = "Select a geometric token to insert into the workspace:",
+                text = "Select an official geometric token powered by RoundedPolygon:",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            CustomShapeType.entries.forEach { type ->
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            onShapeChosen(type)
-                            onDismiss()
-                        }
-                ) {
-                    Row(
+            // Category Filter Chips
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = selectedCategory == null,
+                    onClick = { selectedCategory = null },
+                    label = { Text("All (${CustomShapeType.entries.size})", fontWeight = FontWeight.SemiBold) }
+                )
+                ShapeCategory.entries.forEach { cat ->
+                    val isSelected = selectedCategory == cat
+                    val count = CustomShapeType.entries.count { it.category == cat }
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { selectedCategory = cat },
+                        label = { Text("${cat.displayName} ($count)", fontWeight = FontWeight.SemiBold) }
+                    )
+                }
+            }
+
+            // Scrollable Shape Cards List
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 440.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                filteredShapes.forEach { type ->
+                    val shapeColor = MaterialTheme.colorScheme.primary
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            .clickable {
+                                onShapeChosen(type)
+                                onDismiss()
+                            }
                     ) {
-                        Box(
+                        Row(
                             modifier = Modifier
-                                .size(44.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
+                            // Actual M3 Vector Preview Canvas
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceContainerLowest),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Canvas(modifier = Modifier.size(36.dp)) {
+                                    val w = size.width
+                                    val h = size.height
+                                    try {
+                                        val androidPath = ProceduralM3Assembler.createShapePath(
+                                            type = type,
+                                            cx = w / 2f,
+                                            cy = h / 2f,
+                                            w = w * 0.82f,
+                                            h = h * 0.82f
+                                        )
+                                        drawPath(
+                                            path = androidPath.asComposePath(),
+                                            color = shapeColor,
+                                            style = Fill
+                                        )
+                                    } catch (_: Exception) {
+                                        drawCircle(
+                                            color = shapeColor,
+                                            radius = minOf(w, h) * 0.4f
+                                        )
+                                    }
+                                }
+                            }
 
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = type.displayName,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = type.iconDescription,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = type.displayName,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = type.iconDescription,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

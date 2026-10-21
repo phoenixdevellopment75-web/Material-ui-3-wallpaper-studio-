@@ -61,7 +61,10 @@ fun ExportDialog(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        tonalElevation = 6.dp,
+        scrimColor = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.4f),
+        contentWindowInsets = { androidx.compose.foundation.layout.WindowInsets.navigationBars },
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 0.dp, bottomEnd = 0.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(

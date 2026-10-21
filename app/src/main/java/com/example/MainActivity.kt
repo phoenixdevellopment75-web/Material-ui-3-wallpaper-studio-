@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -20,6 +22,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.AppLaunchScreen
 import com.example.ui.RootNavigation
 import com.example.ui.WallpaperViewModel
+import com.example.ui.pixelPlayerCircularReveal
 import com.example.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
@@ -31,18 +34,30 @@ class MainActivity : ComponentActivity() {
       val uiState by viewModel.uiState.collectAsStateWithLifecycle()
       var isLaunching by rememberSaveable { mutableStateOf(true) }
 
+      val revealProgress by animateFloatAsState(
+        targetValue = if (!isLaunching) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.68f, stiffness = 320f),
+        label = "PixelPlayerCircularReveal"
+      )
+
       MyApplicationTheme(
         dynamicMonetEnabled = uiState.settings.dynamicMonetEnabled,
         themeMode = uiState.settings.themeMode,
         staticPreset = uiState.settings.staticThemePreset
       ) {
         Box(modifier = Modifier.fillMaxSize()) {
-          RootNavigation(viewModel = viewModel)
+          Box(
+            modifier = Modifier
+              .fillMaxSize()
+              .pixelPlayerCircularReveal(revealProgress)
+          ) {
+            RootNavigation(viewModel = viewModel)
+          }
 
           AnimatedVisibility(
             visible = isLaunching,
             enter = fadeIn(),
-            exit = fadeOut(animationSpec = tween(450))
+            exit = fadeOut(animationSpec = tween(400))
           ) {
             AppLaunchScreen(
               onLaunchComplete = { isLaunching = false }

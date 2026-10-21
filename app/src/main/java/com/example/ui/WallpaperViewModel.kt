@@ -3,6 +3,7 @@ package com.example.ui
 import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
+import java.io.File
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -16,6 +17,9 @@ import com.example.engine.AspectRatioPreset
 import com.example.engine.CustomCanvasShape
 import com.example.engine.CustomShapeType
 import com.example.engine.ProceduralRenderer
+import com.example.engine.StudioImageLayer
+import com.example.engine.StudioImagePipeline
+import com.example.engine.StudioTextLayer
 import com.example.engine.WallpaperParams
 import com.example.engine.WallpaperPatternType
 import com.example.export.ExportResult
@@ -25,6 +29,7 @@ import com.example.math.MathUtils
 import com.example.palette.ColorPalette
 import com.example.palette.PaletteEngine
 import java.util.UUID
+import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -45,11 +50,21 @@ data class WallpaperUiState(
     val showStyleSheet: Boolean = false,
     val showPaletteSheet: Boolean = false,
     val showAddShapeSheet: Boolean = false,
+    val showAddTextSheet: Boolean = false,
     val showColorPickerModal: Boolean = false,
     val showCustomPaletteBuilder: Boolean = false,
     val userCustomPalettes: List<ColorPalette> = emptyList(),
     val activeColorStopIndex: Int = 0,
     val selectedShapeId: String? = null,
+    val selectedTextId: String? = null,
+    val selectedImageId: String? = null,
+    val isMultiSelectMode: Boolean = false,
+    val selectedItemIds: Set<String> = emptySet(),
+    val showSavedDesignsSheet: Boolean = false,
+    val savedDesigns: List<SavedStudioDesign> = emptyList(),
+    val isChangelogOpen: Boolean = false,
+    val lastSeenVersionCode: Int = 0,
+    val gitHubReleaseInfo: GitHubReleaseInfo = GitHubReleaseInfo(),
     val isExporting: Boolean = false,
     val isSettingsOpen: Boolean = false,
     val settings: AppSettingsState = AppSettingsState(),
@@ -74,6 +89,7 @@ class WallpaperViewModel(application: Application) : AndroidViewModel(applicatio
     val aiService = AiPaletteService()
     private val aiKeyStorage: AiKeyStorage = AiKeyStorage.getInstance(application)
     private val settingsRepository: SettingsDataStoreRepository = SettingsDataStoreRepository(application)
+    private val designRepository: StudioDesignRepository = StudioDesignRepository(application)
 
     private var previewRenderJob: Job? = null
     private var lastRenderParams: WallpaperParams? = null
@@ -118,6 +134,33 @@ class WallpaperViewModel(application: Application) : AndroidViewModel(applicatio
                         setPatternType(found, persist = false)
                     }
                 }
+            }
+        }
+
+        // Collect saved studio designs from repository
+        viewModelScope.launch {
+            designRepository.savedDesignsFlow.collect { designs ->
+                _uiState.update { it.copy(savedDesigns = designs) }
+            }
+        }
+
+        // First-launch changelog modal check (versionCode = 4)
+        viewModelScope.launch {
+            settingsRepository.lastSeenVersionCodeFlow.collect { lastCode ->
+                val currentVersionCode = 4
+                if (currentVersionCode > lastCode) {
+                    _uiState.update { it.copy(isChangelogOpen = true, lastSeenVersionCode = lastCode) }
+                } else {
+                    _uiState.update { it.copy(lastSeenVersionCode = lastCode) }
+                }
+            }
+        }
+
+        // Check for latest release on GitHub (asynchronous Dispatchers.IO)
+        viewModelScope.launch {
+            val releaseInfo = UpdateChecker.checkForUpdates()
+            if (releaseInfo.isUpdateAvailable) {
+                _uiState.update { it.copy(gitHubReleaseInfo = releaseInfo) }
             }
         }
 
@@ -300,10 +343,39 @@ class WallpaperViewModel(application: Application) : AndroidViewModel(applicatio
         val currentShapes = _uiState.value.params.customShapes
         val updated = currentShapes.map {
             if (it.id == id) {
-                val newW = normW.coerceIn(0.10f, 1.4f)
-                val newH = if (it.type.isProportional1to1) newW else (it.normalizedHeight * (newW / it.normalizedWidth)).coerceIn(0.10f, 1.4f)
+                val newW = normW.coerceIn(0.08f, 1.6f)
+                val ratio = if (it.normalizedWidth > 0f) newW / it.normalizedWidth else 1f
+                val newH = if (it.type == CustomShapeType.CIRCLE || it.lockProportions) {
+                    newW
+                } else {
+                    (it.normalizedHeight * ratio).coerceIn(0.08f, 1.6f)
+                }
                 it.copy(normalizedWidth = newW, normalizedHeight = newH)
             } else it
+        }
+        updateParams { it.copy(customShapes = updated) }
+    }
+
+    fun commitShapeDimensions(id: String, normW: Float, normH: Float) {
+        val currentShapes = _uiState.value.params.customShapes
+        val updated = currentShapes.map {
+            if (it.id == id) {
+                val clampedW = normW.coerceIn(0.08f, 1.6f)
+                val clampedH = if (it.type == CustomShapeType.CIRCLE || it.lockProportions) {
+                    clampedW
+                } else {
+                    normH.coerceIn(0.08f, 1.6f)
+                }
+                it.copy(normalizedWidth = clampedW, normalizedHeight = clampedH)
+            } else it
+        }
+        updateParams { it.copy(customShapes = updated) }
+    }
+
+    fun toggleShapeLockProportions(id: String) {
+        val currentShapes = _uiState.value.params.customShapes
+        val updated = currentShapes.map {
+            if (it.id == id) it.copy(lockProportions = !it.lockProportions) else it
         }
         updateParams { it.copy(customShapes = updated) }
     }
@@ -325,11 +397,576 @@ class WallpaperViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun showAddShapeSheet(show: Boolean) {
-        _uiState.update { it.copy(showAddShapeSheet = show, showStyleSheet = false, showPaletteSheet = false) }
+        _uiState.update { it.copy(showAddShapeSheet = show, showAddTextSheet = false, showStyleSheet = false, showPaletteSheet = false) }
+    }
+
+    fun showAddTextSheet(show: Boolean) {
+        _uiState.update { it.copy(showAddTextSheet = show, showAddShapeSheet = false, showStyleSheet = false, showPaletteSheet = false) }
     }
 
     fun selectShape(id: String?) {
-        _uiState.update { it.copy(selectedShapeId = id) }
+        _uiState.update { it.copy(selectedShapeId = id, selectedTextId = if (id != null) null else it.selectedTextId) }
+    }
+
+    fun selectTextLayer(id: String?) {
+        _uiState.update { it.copy(selectedTextId = id, selectedShapeId = if (id != null) null else it.selectedShapeId) }
+    }
+
+    fun addTextLayer(text: String = "STUDIO") {
+        val currentTexts = _uiState.value.params.customTexts
+        val currentShapes = _uiState.value.params.customShapes
+        val colorsCount = _uiState.value.params.palette.colors.size.coerceAtLeast(1)
+        val maxZ = maxOf(
+            currentShapes.maxOfOrNull { it.zIndex } ?: 0,
+            currentTexts.maxOfOrNull { it.zIndex } ?: 0
+        ) + 1
+        val newText = StudioTextLayer(
+            id = UUID.randomUUID().toString(),
+            text = text,
+            normalizedX = 0.5f,
+            normalizedY = 0.5f,
+            normalizedSize = 0.16f,
+            colorIndex = 1 % colorsCount,
+            zIndex = maxZ
+        )
+        val updatedList = currentTexts + newText
+        updateParams { it.copy(customTexts = updatedList) }
+        _uiState.update { it.copy(selectedTextId = newText.id, selectedShapeId = null) }
+    }
+
+    fun updateTextLayerContent(id: String, newText: String) {
+        val currentTexts = _uiState.value.params.customTexts
+        val updated = currentTexts.map {
+            if (it.id == id) it.copy(text = newText) else it
+        }
+        updateParams { it.copy(customTexts = updated) }
+    }
+
+    fun updateTextPosition(id: String, normX: Float, normY: Float) {
+        val currentTexts = _uiState.value.params.customTexts
+        val updated = currentTexts.map {
+            if (it.id == id) it.copy(normalizedX = normX, normalizedY = normY) else it
+        }
+        updateParams { it.copy(customTexts = updated) }
+    }
+
+    fun updateTextScale(id: String, newSize: Float) {
+        val currentTexts = _uiState.value.params.customTexts
+        val updated = currentTexts.map {
+            if (it.id == id) it.copy(normalizedSize = newSize.coerceIn(0.06f, 0.45f)) else it
+        }
+        updateParams { it.copy(customTexts = updated) }
+    }
+
+    fun updateTextDimensions(id: String, scaleX: Float, scaleY: Float) {
+        val currentTexts = _uiState.value.params.customTexts
+        val updated = currentTexts.map {
+            if (it.id == id) {
+                it.copy(
+                    scaleX = scaleX.coerceIn(0.2f, 5.0f),
+                    scaleY = scaleY.coerceIn(0.2f, 5.0f)
+                )
+            } else it
+        }
+        updateParams { it.copy(customTexts = updated) }
+    }
+
+    fun updateTextRotation(id: String, deg: Float) {
+        val currentTexts = _uiState.value.params.customTexts
+        val updated = currentTexts.map {
+            if (it.id == id) it.copy(rotationDeg = deg % 360f) else it
+        }
+        updateParams { it.copy(customTexts = updated) }
+    }
+
+    fun setTextColorIndex(id: String, colorIdx: Int) {
+        val currentTexts = _uiState.value.params.customTexts
+        val updated = currentTexts.map {
+            if (it.id == id) it.copy(colorIndex = colorIdx, customColorHex = null) else it
+        }
+        updateParams { it.copy(customTexts = updated) }
+    }
+
+    fun updateTextOpacity(id: String, opacity: Float) {
+        val currentTexts = _uiState.value.params.customTexts
+        val updated = currentTexts.map {
+            if (it.id == id) it.copy(opacity = opacity.coerceIn(0.05f, 1.0f)) else it
+        }
+        updateParams { it.copy(customTexts = updated) }
+    }
+
+    fun updateTextShadowRadius(id: String, shadowRadius: Float) {
+        val currentTexts = _uiState.value.params.customTexts
+        val updated = currentTexts.map {
+            if (it.id == id) it.copy(shadowRadius = shadowRadius.coerceIn(0.0f, 40.0f)) else it
+        }
+        updateParams { it.copy(customTexts = updated) }
+    }
+
+    fun updateTextTypographyStyle(id: String, style: com.example.engine.StudioTypographyStyle) {
+        val currentTexts = _uiState.value.params.customTexts
+        val updated = currentTexts.map {
+            if (it.id == id) it.copy(typographyStyle = style) else it
+        }
+        updateParams { it.copy(customTexts = updated) }
+    }
+
+    fun toggleTextOutlineOnly(id: String) {
+        val currentTexts = _uiState.value.params.customTexts
+        val updated = currentTexts.map {
+            if (it.id == id) it.copy(isOutlineOnly = !it.isOutlineOnly) else it
+        }
+        updateParams { it.copy(customTexts = updated) }
+    }
+
+    fun updateTextStrokeWidth(id: String, strokeWidthDp: Float) {
+        val currentTexts = _uiState.value.params.customTexts
+        val updated = currentTexts.map {
+            if (it.id == id) it.copy(strokeWidthDp = strokeWidthDp.coerceIn(1.0f, 12.0f)) else it
+        }
+        updateParams { it.copy(customTexts = updated) }
+    }
+
+    fun updateTextGlowRadius(id: String, glowRadiusDp: Float) {
+        val currentTexts = _uiState.value.params.customTexts
+        val updated = currentTexts.map {
+            if (it.id == id) it.copy(glowRadiusDp = glowRadiusDp.coerceIn(0.0f, 32.0f)) else it
+        }
+        updateParams { it.copy(customTexts = updated) }
+    }
+
+    fun updateTextLetterSpacing(id: String, letterSpacingSp: Float) {
+        val currentTexts = _uiState.value.params.customTexts
+        val updated = currentTexts.map {
+            if (it.id == id) it.copy(letterSpacingSp = letterSpacingSp.coerceIn(-4.0f, 12.0f)) else it
+        }
+        updateParams { it.copy(customTexts = updated) }
+    }
+
+    fun updateTextLineHeight(id: String, lineHeightMultiplier: Float) {
+        val currentTexts = _uiState.value.params.customTexts
+        val updated = currentTexts.map {
+            if (it.id == id) it.copy(lineHeightMultiplier = lineHeightMultiplier.coerceIn(0.75f, 1.60f)) else it
+        }
+        updateParams { it.copy(customTexts = updated) }
+    }
+
+    fun importCustomFont(textId: String, uri: Uri, context: Context) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val contentResolver = context.contentResolver
+                var fontName = "Custom Font"
+                contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex >= 0 && cursor.moveToFirst()) {
+                        cursor.getString(nameIndex)?.let { fontName = it }
+                    }
+                }
+
+                val fontsDir = File(context.filesDir, "custom_fonts").apply { mkdirs() }
+                val safeName = fontName.replace("[^a-zA-Z0-9._-]".toRegex(), "_")
+                val destFile = File(fontsDir, "${System.currentTimeMillis()}_$safeName")
+
+                contentResolver.openInputStream(uri)?.use { input ->
+                    destFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+
+                // Verify file creates a valid Typeface
+                val typeface = android.graphics.Typeface.createFromFile(destFile)
+                if (typeface != null) {
+                    _uiState.update { state ->
+                        state.copy(
+                            params = state.params.copy(
+                                customTexts = state.params.customTexts.map { text ->
+                                    if (text.id == textId) {
+                                        text.copy(
+                                            customFontPath = destFile.absolutePath,
+                                            customFontName = fontName
+                                        )
+                                    } else text
+                                }
+                            )
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("WallpaperViewModel", "Failed to import custom font", e)
+            }
+        }
+    }
+
+    fun clearCustomFont(textId: String) {
+        _uiState.update { state ->
+            state.copy(
+                params = state.params.copy(
+                    customTexts = state.params.customTexts.map { text ->
+                        if (text.id == textId) {
+                            text.copy(customFontPath = null, customFontName = null)
+                        } else text
+                    }
+                )
+            )
+        }
+    }
+
+    fun bringTextToFront(id: String) {
+        val currentTexts = _uiState.value.params.customTexts
+        val currentShapes = _uiState.value.params.customShapes
+        val maxZ = maxOf(
+            currentShapes.maxOfOrNull { it.zIndex } ?: 0,
+            currentTexts.maxOfOrNull { it.zIndex } ?: 0
+        ) + 1
+        val updated = currentTexts.map {
+            if (it.id == id) it.copy(zIndex = maxZ) else it
+        }
+        updateParams { it.copy(customTexts = updated) }
+    }
+
+    fun sendTextToBack(id: String) {
+        val currentTexts = _uiState.value.params.customTexts
+        val currentShapes = _uiState.value.params.customShapes
+        val minZ = minOf(
+            currentShapes.minOfOrNull { it.zIndex } ?: 0,
+            currentTexts.minOfOrNull { it.zIndex } ?: 0
+        ) - 1
+        val updated = currentTexts.map {
+            if (it.id == id) it.copy(zIndex = minZ) else it
+        }
+        updateParams { it.copy(customTexts = updated) }
+    }
+
+    fun deleteTextLayer(id: String) {
+        val currentTexts = _uiState.value.params.customTexts
+        val updated = currentTexts.filterNot { it.id == id }
+        updateParams { it.copy(customTexts = updated) }
+        if (_uiState.value.selectedTextId == id) {
+            _uiState.update { it.copy(selectedTextId = null) }
+        }
+    }
+
+    // --- Picture inside Shape / Widget (Image Layer) Methods ---
+
+    fun selectImageLayer(id: String?) {
+        _uiState.update {
+            it.copy(
+                selectedImageId = id,
+                selectedShapeId = if (id != null) null else it.selectedShapeId,
+                selectedTextId = if (id != null) null else it.selectedTextId
+            )
+        }
+    }
+
+    fun importImageToStudio(context: Context, uri: Uri) {
+        viewModelScope.launch {
+            val result = StudioImagePipeline.importImageSafe(context, uri)
+            if (result == null) {
+                showSnackbar("Failed to import photo", false)
+                return@launch
+            }
+            val (path, bitmap) = result
+            val currentImages = _uiState.value.params.customImages
+            val currentShapes = _uiState.value.params.customShapes
+            val currentTexts = _uiState.value.params.customTexts
+            val maxZ = maxOf(
+                currentShapes.maxOfOrNull { it.zIndex } ?: 0,
+                currentTexts.maxOfOrNull { it.zIndex } ?: 0,
+                currentImages.maxOfOrNull { it.zIndex } ?: 0
+            ) + 1
+
+            val newImage = StudioImageLayer(
+                id = UUID.randomUUID().toString(),
+                imagePath = path,
+                maskShape = CustomShapeType.CLOVER_4,
+                normalizedX = 0.5f,
+                normalizedY = 0.5f,
+                normalizedWidth = 0.38f,
+                normalizedHeight = 0.38f,
+                rotationDeg = 0f,
+                opacity = 1f,
+                shadowRadius = 16f,
+                zIndex = maxZ,
+                lockProportions = true,
+                cachedBitmap = bitmap
+            )
+
+            val updated = currentImages + newImage
+            updateParams { it.copy(customImages = updated) }
+            _uiState.update {
+                it.copy(
+                    selectedImageId = newImage.id,
+                    selectedShapeId = null,
+                    selectedTextId = null
+                )
+            }
+            showSnackbar("Photo imported inside shape!", true)
+        }
+    }
+
+    fun updateImagePosition(id: String, normX: Float, normY: Float) {
+        val current = _uiState.value.params.customImages
+        val updated = current.map { if (it.id == id) it.copy(normalizedX = normX, normalizedY = normY) else it }
+        updateParams { it.copy(customImages = updated) }
+    }
+
+    fun updateImageDimensions(id: String, normW: Float, normH: Float) {
+        val current = _uiState.value.params.customImages
+        val updated = current.map { if (it.id == id) it.copy(normalizedWidth = normW, normalizedHeight = normH) else it }
+        updateParams { it.copy(customImages = updated) }
+    }
+
+    fun updateImageRotation(id: String, deltaDeg: Float) {
+        val current = _uiState.value.params.customImages
+        val updated = current.map {
+            if (it.id == id) {
+                val newRot = (it.rotationDeg + deltaDeg) % 360f
+                it.copy(rotationDeg = if (newRot < 0) newRot + 360f else newRot)
+            } else it
+        }
+        updateParams { it.copy(customImages = updated) }
+    }
+
+    fun updateImageShapeType(id: String, shapeType: CustomShapeType) {
+        val current = _uiState.value.params.customImages
+        val updated = current.map { if (it.id == id) it.copy(maskShape = shapeType) else it }
+        updateParams { it.copy(customImages = updated) }
+    }
+
+    fun updateImageOpacity(id: String, opacity: Float) {
+        val current = _uiState.value.params.customImages
+        val updated = current.map { if (it.id == id) it.copy(opacity = opacity.coerceIn(0.05f, 1f)) else it }
+        updateParams { it.copy(customImages = updated) }
+    }
+
+    fun updateImageShadowRadius(id: String, radius: Float) {
+        val current = _uiState.value.params.customImages
+        val updated = current.map { if (it.id == id) it.copy(shadowRadius = radius.coerceIn(0f, 32f)) else it }
+        updateParams { it.copy(customImages = updated) }
+    }
+
+    fun toggleImageLockProportions(id: String) {
+        val current = _uiState.value.params.customImages
+        val updated = current.map { if (it.id == id) it.copy(lockProportions = !it.lockProportions) else it }
+        updateParams { it.copy(customImages = updated) }
+    }
+
+    fun deleteImageLayer(id: String) {
+        val current = _uiState.value.params.customImages
+        val updated = current.filterNot { it.id == id }
+        updateParams { it.copy(customImages = updated) }
+        if (_uiState.value.selectedImageId == id) {
+            _uiState.update { it.copy(selectedImageId = null) }
+        }
+    }
+
+    fun duplicateImageLayer(id: String) {
+        val current = _uiState.value.params.customImages
+        val target = current.find { it.id == id } ?: return
+        val currentShapes = _uiState.value.params.customShapes
+        val currentTexts = _uiState.value.params.customTexts
+        val maxZ = maxOf(
+            currentShapes.maxOfOrNull { it.zIndex } ?: 0,
+            currentTexts.maxOfOrNull { it.zIndex } ?: 0,
+            current.maxOfOrNull { it.zIndex } ?: 0
+        ) + 1
+        val duplicate = target.copy(
+            id = UUID.randomUUID().toString(),
+            normalizedX = (target.normalizedX + 0.05f).coerceAtMost(0.9f),
+            normalizedY = (target.normalizedY + 0.05f).coerceAtMost(0.9f),
+            zIndex = maxZ
+        )
+        val updated = current + duplicate
+        updateParams { it.copy(customImages = updated) }
+        _uiState.update { it.copy(selectedImageId = duplicate.id) }
+    }
+
+    fun bringImageToFront(id: String) {
+        val current = _uiState.value.params.customImages
+        val currentShapes = _uiState.value.params.customShapes
+        val currentTexts = _uiState.value.params.customTexts
+        val maxZ = maxOf(
+            currentShapes.maxOfOrNull { it.zIndex } ?: 0,
+            currentTexts.maxOfOrNull { it.zIndex } ?: 0,
+            current.maxOfOrNull { it.zIndex } ?: 0
+        ) + 1
+        val updated = current.map { if (it.id == id) it.copy(zIndex = maxZ) else it }
+        updateParams { it.copy(customImages = updated) }
+    }
+
+    fun sendImageToBack(id: String) {
+        val current = _uiState.value.params.customImages
+        val currentShapes = _uiState.value.params.customShapes
+        val currentTexts = _uiState.value.params.customTexts
+        val minZ = minOf(
+            currentShapes.minOfOrNull { it.zIndex } ?: 0,
+            currentTexts.minOfOrNull { it.zIndex } ?: 0,
+            current.minOfOrNull { it.zIndex } ?: 0
+        ) - 1
+        val updated = current.map { if (it.id == id) it.copy(zIndex = minZ) else it }
+        updateParams { it.copy(customImages = updated) }
+    }
+
+    // --- Multi-Element Group Select Methods ---
+
+    fun toggleMultiSelectMode() {
+        val current = _uiState.value.isMultiSelectMode
+        _uiState.update {
+            it.copy(
+                isMultiSelectMode = !current,
+                selectedItemIds = if (!current && it.selectedShapeId != null) setOf(it.selectedShapeId)
+                else if (!current && it.selectedTextId != null) setOf(it.selectedTextId)
+                else if (!current && it.selectedImageId != null) setOf(it.selectedImageId)
+                else emptySet()
+            )
+        }
+    }
+
+    fun toggleItemSelection(id: String) {
+        val current = _uiState.value.selectedItemIds
+        val updated = if (id in current) current - id else current + id
+        _uiState.update { it.copy(selectedItemIds = updated) }
+    }
+
+    fun selectAllItems() {
+        val allIds = (_uiState.value.params.customShapes.map { it.id } +
+                _uiState.value.params.customTexts.map { it.id } +
+                _uiState.value.params.customImages.map { it.id }).toSet()
+        _uiState.update { it.copy(selectedItemIds = allIds) }
+    }
+
+    fun bringGroupToFront() {
+        val selected = _uiState.value.selectedItemIds
+        if (selected.isEmpty()) return
+        val currentShapes = _uiState.value.params.customShapes
+        val currentTexts = _uiState.value.params.customTexts
+        val currentImages = _uiState.value.params.customImages
+        var maxZ = maxOf(
+            currentShapes.maxOfOrNull { it.zIndex } ?: 0,
+            currentTexts.maxOfOrNull { it.zIndex } ?: 0,
+            currentImages.maxOfOrNull { it.zIndex } ?: 0
+        )
+        val updatedShapes = currentShapes.map { if (it.id in selected) it.copy(zIndex = ++maxZ) else it }
+        val updatedTexts = currentTexts.map { if (it.id in selected) it.copy(zIndex = ++maxZ) else it }
+        val updatedImages = currentImages.map { if (it.id in selected) it.copy(zIndex = ++maxZ) else it }
+        updateParams { it.copy(customShapes = updatedShapes, customTexts = updatedTexts, customImages = updatedImages) }
+    }
+
+    fun sendGroupToBack() {
+        val selected = _uiState.value.selectedItemIds
+        if (selected.isEmpty()) return
+        val currentShapes = _uiState.value.params.customShapes
+        val currentTexts = _uiState.value.params.customTexts
+        val currentImages = _uiState.value.params.customImages
+        var minZ = minOf(
+            currentShapes.minOfOrNull { it.zIndex } ?: 0,
+            currentTexts.minOfOrNull { it.zIndex } ?: 0,
+            currentImages.minOfOrNull { it.zIndex } ?: 0
+        )
+        val updatedShapes = currentShapes.map { if (it.id in selected) it.copy(zIndex = --minZ) else it }
+        val updatedTexts = currentTexts.map { if (it.id in selected) it.copy(zIndex = --minZ) else it }
+        val updatedImages = currentImages.map { if (it.id in selected) it.copy(zIndex = --minZ) else it }
+        updateParams { it.copy(customShapes = updatedShapes, customTexts = updatedTexts, customImages = updatedImages) }
+    }
+
+    fun clearSelection() {
+        _uiState.update {
+            it.copy(
+                selectedShapeId = null,
+                selectedTextId = null,
+                selectedImageId = null,
+                selectedItemIds = emptySet()
+            )
+        }
+    }
+
+    fun commitGroupTranslation(deltaNormX: Float, deltaNormY: Float) {
+        val selected = _uiState.value.selectedItemIds
+        if (selected.isEmpty()) return
+        val updated = StudioGroupManager.translateGroup(_uiState.value.params, selected, deltaNormX, deltaNormY)
+        updateParams { updated }
+    }
+
+    fun commitGroupScale(scaleFactor: Float) {
+        val selected = _uiState.value.selectedItemIds
+        if (selected.isEmpty()) return
+        val bounds = StudioGroupManager.calculateGroupBounds(selected, _uiState.value.params) ?: return
+        val updated = StudioGroupManager.scaleGroup(_uiState.value.params, selected, scaleFactor, bounds.centerNormX, bounds.centerNormY)
+        updateParams { updated }
+    }
+
+    fun deleteSelectedGroup() {
+        val selected = _uiState.value.selectedItemIds
+        if (selected.isEmpty()) return
+        val count = selected.size
+        val updated = StudioGroupManager.deleteGroup(_uiState.value.params, selected)
+        updateParams { updated }
+        clearSelection()
+        showSnackbar("Deleted $count items", true)
+    }
+
+    // --- Saved Studio Designs Methods ---
+
+    fun showSavedDesignsSheet(show: Boolean) {
+        _uiState.update { it.copy(showSavedDesignsSheet = show) }
+    }
+
+    fun saveCurrentDesign(name: String) {
+        viewModelScope.launch {
+            val design = designRepository.saveDesign(name, _uiState.value.params)
+            showSnackbar("Design \"${design.name}\" saved to studio library!", true)
+        }
+    }
+
+    fun loadDesign(design: SavedStudioDesign) {
+        val loaded = designRepository.loadParamsFromDesign(design)
+        if (loaded != null) {
+            updateParams { loaded }
+            showSnackbar("Loaded \"${design.name}\"", true)
+        }
+    }
+
+    fun duplicateDesign(designId: String) {
+        viewModelScope.launch {
+            designRepository.duplicateDesign(designId)
+            showSnackbar("Design duplicated", true)
+        }
+    }
+
+    fun deleteDesign(designId: String) {
+        viewModelScope.launch {
+            designRepository.deleteDesign(designId)
+            showSnackbar("Design deleted", true)
+        }
+    }
+
+    // --- First-Launch Changelog & Update Banner Methods ---
+
+    fun dismissChangelog() {
+        _uiState.update { it.copy(isChangelogOpen = false) }
+        viewModelScope.launch {
+            settingsRepository.saveLastSeenVersionCode(4)
+        }
+    }
+
+    fun showChangelog(open: Boolean) {
+        _uiState.update { it.copy(isChangelogOpen = open) }
+    }
+
+    fun setGitHubReleaseInfo(info: GitHubReleaseInfo) {
+        _uiState.update { it.copy(gitHubReleaseInfo = info) }
+    }
+
+    fun dismissUpdateBanner() {
+        _uiState.update { it.copy(gitHubReleaseInfo = it.gitHubReleaseInfo.copy(isUpdateAvailable = false)) }
+    }
+
+    fun setBottomDockMode(mode: BottomDockMode) {
+        val newSettings = _uiState.value.settings.copy(bottomDockMode = mode)
+        _uiState.update { it.copy(settings = newSettings) }
+        viewModelScope.launch {
+            settingsRepository.saveSettings(newSettings)
+        }
     }
 
     fun addCustomShape(type: CustomShapeType) {
@@ -449,34 +1086,142 @@ class WallpaperViewModel(application: Application) : AndroidViewModel(applicatio
         updateParams { it.copy(customShapes = updated) }
     }
 
-    fun shuffleCustomShapes() {
-        val rng = MathUtils.FastRandom(System.nanoTime())
-        val goldenAnchors = listOf(
-            Pair(0.382f, 0.618f),
-            Pair(0.618f, 0.382f),
-            Pair(0.618f, 0.764f),
-            Pair(0.382f, 0.236f),
-            Pair(0.500f, 0.500f)
-        )
+    fun updateShapeOpacity(id: String, opacity: Float) {
         val currentShapes = _uiState.value.params.customShapes
-        val updated = currentShapes.mapIndexed { i, shape ->
-            val anchor = goldenAnchors[i % goldenAnchors.size]
-            val jitterX = (rng.nextFloat() - 0.5f) * 0.16f
-            val jitterY = (rng.nextFloat() - 0.5f) * 0.16f
-            val rot = when (i % 4) {
-                0 -> 0f
-                1 -> 45f
-                2 -> 90f
-                else -> 135f
-            }
-            shape.copy(
-                normalizedX = (anchor.first + jitterX).coerceIn(0.15f, 0.85f),
-                normalizedY = (anchor.second + jitterY).coerceIn(0.15f, 0.85f),
-                rotationDeg = rot,
-                colorIndex = (i + 1) % _uiState.value.params.palette.colors.size.coerceAtLeast(1)
-            )
+        val updated = currentShapes.map {
+            if (it.id == id) it.copy(opacity = opacity.coerceIn(0.0f, 1.0f)) else it
         }
         updateParams { it.copy(customShapes = updated) }
+    }
+
+    fun updateShapeShadowRadius(id: String, shadowRadius: Float) {
+        val currentShapes = _uiState.value.params.customShapes
+        val updated = currentShapes.map {
+            if (it.id == id) it.copy(shadowRadius = shadowRadius.coerceIn(0.0f, 32.0f)) else it
+        }
+        updateParams { it.copy(customShapes = updated) }
+    }
+
+    fun updateShapeBlurRadius(id: String, blurRadius: Float) {
+        val currentShapes = _uiState.value.params.customShapes
+        val updated = currentShapes.map {
+            if (it.id == id) it.copy(blurRadius = blurRadius.coerceIn(0.0f, 32.0f)) else it
+        }
+        updateParams { it.copy(customShapes = updated) }
+    }
+
+    fun updateShapeStrokeWidth(id: String, strokeWidth: Float) {
+        val currentShapes = _uiState.value.params.customShapes
+        val updated = currentShapes.map {
+            if (it.id == id) it.copy(strokeWidth = strokeWidth.coerceIn(1.0f, 16.0f)) else it
+        }
+        updateParams { it.copy(customShapes = updated) }
+    }
+
+    /**
+     * Studio Mode: Procedural Layout Generator ("Auto-Arrange").
+     * Deterministically places 4 to 7 harmoniously balanced Material 3 shapes
+     * (Clovers, Sunny badges, Semicircles, and Squircles) across the canvas.
+     * Calculates non-colliding coordinates, pleasing scale variations (0.18f to 0.44f),
+     * and balanced palette stop assignments.
+     */
+    fun generateProceduralStudioLayout() {
+        val rng = MathUtils.FastRandom(System.nanoTime())
+        val shapePool = listOf(
+            CustomShapeType.CLOVER_4,
+            CustomShapeType.SUNNY_BADGE,
+            CustomShapeType.SEMICIRCLE,
+            CustomShapeType.SLANTED_SQUIRCLE,
+            CustomShapeType.CLOVER_8,
+            CustomShapeType.COOKIE,
+            CustomShapeType.M3_ARCH
+        )
+
+        val count = 4 + rng.nextInt(4) // 4 to 7 shapes
+        val paletteSize = _uiState.value.params.palette.colors.size.coerceAtLeast(1)
+        val generated = mutableListOf<CustomCanvasShape>()
+
+        // Aspect ratio compensation for typical mobile viewport (~1:2)
+        val aspect = 1.9f
+
+        for (i in 0 until count) {
+            val type = shapePool[rng.nextInt(shapePool.size)]
+            // Scale variations: 0.18f (~48-60dp) to 0.42f (~160-180dp)
+            val scaleNorm = 0.18f + rng.nextFloat() * 0.24f
+            val widthNorm = scaleNorm
+            val heightNorm = if (type.isProportional1to1) scaleNorm else scaleNorm * (0.8f + rng.nextFloat() * 0.4f)
+
+            // Rejection sampling for non-colliding coordinates
+            var bestX = 0.5f
+            var bestY = 0.5f
+            var maxMinDist = -1f
+
+            for (attempt in 0 until 40) {
+                val candidateX = 0.18f + rng.nextFloat() * 0.64f
+                val candidateY = 0.16f + rng.nextFloat() * 0.68f
+
+                var minDist = Float.MAX_VALUE
+                for (existing in generated) {
+                    val dx = (candidateX - existing.normalizedX)
+                    val dy = (candidateY - existing.normalizedY) * aspect
+                    val dist = kotlin.math.sqrt(dx * dx + dy * dy)
+                    if (dist < minDist) {
+                        minDist = dist
+                    }
+                }
+
+                // Required minimum distance based on average radii
+                val requiredDist = (widthNorm * 0.95f)
+                if (generated.isEmpty() || minDist >= requiredDist) {
+                    bestX = candidateX
+                    bestY = candidateY
+                    break
+                }
+
+                if (minDist > maxMinDist) {
+                    maxMinDist = minDist
+                    bestX = candidateX
+                    bestY = candidateY
+                }
+            }
+
+            val rot = when (rng.nextInt(6)) {
+                0 -> 0f
+                1 -> 15f
+                2 -> 30f
+                3 -> 45f
+                4 -> 90f
+                else -> 180f
+            }
+
+            // Balanced palette stops assignment (foreground accents 1, 2, 3...)
+            val colorIdx = ((i + 1) % paletteSize)
+            val shadow = 12f + rng.nextFloat() * 12f
+
+            generated.add(
+                CustomCanvasShape(
+                    id = java.util.UUID.randomUUID().toString(),
+                    type = type,
+                    normalizedX = bestX,
+                    normalizedY = bestY,
+                    normalizedWidth = widthNorm,
+                    normalizedHeight = heightNorm,
+                    rotationDeg = rot,
+                    colorIndex = colorIdx,
+                    opacity = 1.0f,
+                    shadowRadius = shadow,
+                    blurRadius = 0.0f,
+                    zIndex = i
+                )
+            )
+        }
+
+        _uiState.update { it.copy(selectedShapeId = generated.firstOrNull()?.id) }
+        updateParams { it.copy(customShapes = generated) }
+    }
+
+    fun shuffleCustomShapes() {
+        generateProceduralStudioLayout()
     }
 
     fun resetToDefaults() {
@@ -622,6 +1367,10 @@ class WallpaperViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { it.copy(showColorPickerModal = show, activeColorStopIndex = stopIndex) }
     }
 
+    fun showSnackbar(message: String, isSuccess: Boolean = true) {
+        _uiState.update { it.copy(snackbarMessage = message) }
+    }
+
     fun clearSnackbar() {
         _uiState.update { it.copy(snackbarMessage = null) }
     }
@@ -750,13 +1499,24 @@ class WallpaperViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
 
+            val oldBitmap = _uiState.value.previewBitmap
             _uiState.update {
                 it.copy(
                     previewBitmap = bitmap,
                     isGeneratingPreview = false
                 )
             }
+            if (oldBitmap != null && oldBitmap != bitmap && !oldBitmap.isRecycled) {
+                oldBitmap.recycle()
+            }
             lastRenderParams = currentParams
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        _uiState.value.previewBitmap?.let {
+            if (!it.isRecycled) it.recycle()
         }
     }
 }

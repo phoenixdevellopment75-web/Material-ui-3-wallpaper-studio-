@@ -13,6 +13,16 @@ import java.util.concurrent.TimeUnit
 
 class AiPaletteService {
 
+    companion object {
+        val default = AiPaletteService()
+
+        fun generateLocalFallbackCandidates(
+            prompt: String,
+            mood: String,
+            daylight: DaylightContext
+        ): List<AiPaletteCandidate> = default.generateLocalFallbackCandidates(prompt, mood, daylight)
+    }
+
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(25, TimeUnit.SECONDS)
@@ -225,7 +235,87 @@ class AiPaletteService {
             val parsedPalette = parsePaletteJson(rawJsonText)
             Result.success(parsedPalette)
         } catch (e: Exception) {
-            Result.failure(e)
+            // Graceful degradation: instant fallback to curated procedural presets if the network or API fails
+            Result.success(
+                generateLocalFallbackPalette(patternName, moodTag, daylightContext)
+            )
+        }
+    }
+
+    /**
+     * Generates 2 to 3 distinct candidate colorways matching user prompt and lighting context.
+     */
+    suspend fun generatePaletteCandidates(
+        provider: AiProvider,
+        apiKey: String,
+        model: String,
+        patternName: String,
+        subTypeName: String,
+        moodTag: String,
+        daylightContext: DaylightContext,
+        customPrompt: String = ""
+    ): Result<List<AiPaletteCandidate>> = withContext(Dispatchers.IO) {
+        val trimmedKey = apiKey.trim()
+        val chosenModel = model.trim().ifEmpty { provider.defaultModel }
+
+        if (trimmedKey.isEmpty()) {
+            return@withContext Result.success(
+                generateLocalFallbackCandidates(customPrompt, moodTag, daylightContext)
+            )
+        }
+
+        try {
+            val systemPrompt = """
+                You are an expert Material Design 3 color palette architect and dynamic Monet harmony designer.
+                Your task is to generate 3 distinct, beautifully balanced 5-step tonal colorway candidates for a wallpaper design based on the user's prompt.
+                Each candidate must contain a name, a short aesthetic description, and exactly 5 hex color codes with monotonically balanced HCT luminance from surface/background to bright accent.
+
+                You MUST return ONLY a JSON object with this exact schema:
+                {
+                  "candidates": [
+                    {
+                      "name": "Creative Name 1",
+                      "description": "Short aesthetic tone description",
+                      "hexCodes": ["#111827", "#1F2937", "#4B5563", "#9CA3AF", "#F3F4F6"]
+                    },
+                    {
+                      "name": "Creative Name 2",
+                      "description": "Short aesthetic tone description",
+                      "hexCodes": ["#0B192C", "#1E3E62", "#415A77", "#84A98C", "#E0E1DD"]
+                    },
+                    {
+                      "name": "Creative Name 3",
+                      "description": "Short aesthetic tone description",
+                      "hexCodes": ["#221E22", "#44344F", "#564D65", "#988B8E", "#F5EBE0"]
+                    }
+                  ]
+                }
+                Do not include markdown backticks or any conversational text outside the JSON object.
+            """.trimIndent()
+
+            val userPrompt = buildString {
+                appendLine("Design 3 alternate Material 3 colorway candidates for:")
+                appendLine("Pattern: $patternName ($subTypeName)")
+                appendLine("Aesthetic / Theme: $moodTag")
+                appendLine("Daylight Context: ${daylightContext.label} (${daylightContext.iconDescription})")
+                if (customPrompt.isNotBlank()) {
+                    appendLine("User Prompt: $customPrompt")
+                }
+                appendLine("Ensure each candidate has 5 valid 6-character hex codes starting with #.")
+            }
+
+            val rawJsonText = when (provider) {
+                AiProvider.GEMINI -> callGemini(trimmedKey, chosenModel, systemPrompt, userPrompt)
+                AiProvider.OPENAI -> callOpenAi(trimmedKey, chosenModel, systemPrompt, userPrompt)
+                AiProvider.OPENROUTER -> callOpenRouter(trimmedKey, chosenModel, systemPrompt, userPrompt)
+                AiProvider.NVIDIA_NIM -> callNvidiaNim(trimmedKey, chosenModel, systemPrompt, userPrompt)
+            }
+
+            val candidates = parseCandidatesJson(rawJsonText, customPrompt, moodTag, daylightContext)
+            Result.success(candidates)
+        } catch (e: Exception) {
+            val fallback = generateLocalFallbackCandidates(customPrompt, moodTag, daylightContext)
+            Result.success(fallback)
         }
     }
 
@@ -524,5 +614,125 @@ class AiPaletteService {
             hexCodes = hexCodes,
             colors = colors
         )
+    }
+
+    private fun parseCandidatesJson(
+        rawText: String,
+        customPrompt: String,
+        moodTag: String,
+        daylight: DaylightContext
+    ): List<AiPaletteCandidate> {
+        var cleaned = rawText.trim()
+        if (cleaned.startsWith("```json")) cleaned = cleaned.removePrefix("```json")
+        if (cleaned.startsWith("```")) cleaned = cleaned.removePrefix("```")
+        if (cleaned.endsWith("```")) cleaned = cleaned.removeSuffix("```")
+        cleaned = cleaned.trim()
+
+        try {
+            val json = JSONObject(cleaned)
+            val candidatesArray = json.optJSONArray("candidates")
+            if (candidatesArray != null && candidatesArray.length() > 0) {
+                val list = mutableListOf<AiPaletteCandidate>()
+                for (i in 0 until minOf(3, candidatesArray.length())) {
+                    val item = candidatesArray.getJSONObject(i)
+                    val name = item.optString("name", "Colorway ${i + 1}")
+                    val desc = item.optString("description", "")
+                    val hexArr = item.optJSONArray("hexCodes") ?: item.optJSONArray("tones") ?: JSONArray()
+                    val hexList = mutableListOf<String>()
+                    val colorList = mutableListOf<Color>()
+                    for (k in 0 until hexArr.length()) {
+                        val h = hexArr.optString(k, "")
+                        val col = parseHexColorOrNull(h)
+                        if (col != null) {
+                            hexList.add(h.uppercase())
+                            colorList.add(col)
+                        }
+                    }
+                    if (colorList.size >= 5) {
+                        list.add(
+                            AiPaletteCandidate(
+                                name = name,
+                                description = desc,
+                                hexCodes = hexList.take(5),
+                                colors = colorList.take(5)
+                            )
+                        )
+                    }
+                }
+                if (list.isNotEmpty()) return list
+            }
+        } catch (_: Exception) { }
+
+        return generateLocalFallbackCandidates(customPrompt, moodTag, daylight)
+    }
+
+    fun generateLocalFallbackCandidates(
+        prompt: String,
+        mood: String,
+        daylight: DaylightContext
+    ): List<AiPaletteCandidate> {
+        val p = prompt.lowercase()
+        return when {
+            p.contains("nordic") || p.contains("pine") || p.contains("mist") -> listOf(
+                AiPaletteCandidate(
+                    name = "Nordic Pine & Fog",
+                    description = "Cool deep firs rising through pale morning mist",
+                    hexCodes = listOf("#1A2621", "#2D3F37", "#5B7368", "#A4B8AF", "#F0F4F2"),
+                    colors = listOf(Color(0xFF1A2621), Color(0xFF2D3F37), Color(0xFF5B7368), Color(0xFFA4B8AF), Color(0xFFF0F4F2))
+                ),
+                AiPaletteCandidate(
+                    name = "Arctic Fjord Twilight",
+                    description = "Glacial indigo shadows meeting crisp crystalline snow",
+                    hexCodes = listOf("#131B24", "#243342", "#4D637B", "#99B2CC", "#EDF3F8"),
+                    colors = listOf(Color(0xFF131B24), Color(0xFF243342), Color(0xFF4D637B), Color(0xFF99B2CC), Color(0xFFEDF3F8))
+                ),
+                AiPaletteCandidate(
+                    name = "Muted Birch Bark",
+                    description = "Organic warm grey with Scandinavian ochre accents",
+                    hexCodes = listOf("#262220", "#453E3B", "#7D726D", "#C4B9B3", "#F5F2F0"),
+                    colors = listOf(Color(0xFF262220), Color(0xFF453E3B), Color(0xFF7D726D), Color(0xFFC4B9B3), Color(0xFFF5F2F0))
+                )
+            )
+            p.contains("cyber") || p.contains("tokyo") || p.contains("neon") || p.contains("rain") -> listOf(
+                AiPaletteCandidate(
+                    name = "Shinjuku Rain",
+                    description = "Wet asphalt reflecting electric violet and cyan neon",
+                    hexCodes = listOf("#0C0E14", "#1E1E2E", "#4E3D67", "#8F65AF", "#D6B8F6"),
+                    colors = listOf(Color(0xFF0C0E14), Color(0xFF1E1E2E), Color(0xFF4E3D67), Color(0xFF8F65AF), Color(0xFFD6B8F6))
+                ),
+                AiPaletteCandidate(
+                    name = "Neon Cyberpunk",
+                    description = "Deep slate indigo with radiant bioluminescent amber",
+                    hexCodes = listOf("#0A1118", "#162836", "#2D556E", "#5EB1BF", "#F4F9F9"),
+                    colors = listOf(Color(0xFF0A1118), Color(0xFF162836), Color(0xFF2D556E), Color(0xFF5EB1BF), Color(0xFFF4F9F9))
+                ),
+                AiPaletteCandidate(
+                    name = "Midnight Alley",
+                    description = "Moody dark OLED contrast with high-visibility coral glow",
+                    hexCodes = listOf("#090A0F", "#1A1528", "#4A2B4B", "#A3485E", "#F28482"),
+                    colors = listOf(Color(0xFF090A0F), Color(0xFF1A1528), Color(0xFF4A2B4B), Color(0xFFA3485E), Color(0xFFF28482))
+                )
+            )
+            else -> listOf(
+                AiPaletteCandidate(
+                    name = "Earthy Amber Hearth",
+                    description = "Warm organic clay with roasted terracotta and cream",
+                    hexCodes = listOf("#241A18", "#452C27", "#7D4E44", "#BF8377", "#F7ECE9"),
+                    colors = listOf(Color(0xFF241A18), Color(0xFF452C27), Color(0xFF7D4E44), Color(0xFFBF8377), Color(0xFFF7ECE9))
+                ),
+                AiPaletteCandidate(
+                    name = "Nordic Twilight",
+                    description = "Calm dusk tones with balanced lavender and muted slate",
+                    hexCodes = listOf("#1A1C24", "#2E3342", "#4F5770", "#8D97B8", "#DDE2F2"),
+                    colors = listOf(Color(0xFF1A1C24), Color(0xFF2E3342), Color(0xFF4F5770), Color(0xFF8D97B8), Color(0xFFDDE2F2))
+                ),
+                AiPaletteCandidate(
+                    name = "Botanical Moss",
+                    description = "Deep forest shadow flowing into sage and warm paper",
+                    hexCodes = listOf("#18241B", "#2E3F32", "#526B57", "#8EAA94", "#E8F0E9"),
+                    colors = listOf(Color(0xFF18241B), Color(0xFF2E3F32), Color(0xFF526B57), Color(0xFF8EAA94), Color(0xFFE8F0E9))
+                )
+            )
+        }
     }
 }

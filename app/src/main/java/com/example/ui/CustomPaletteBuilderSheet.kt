@@ -58,6 +58,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -120,33 +121,17 @@ fun CustomPaletteBuilderSheet(
         mutableStateOf(initialPalette?.gradientType ?: GradientType.LINEAR)
     }
 
-    // Active color HSV state for selected stop
+    // Active color HSV state for selected stop with stable ColorPickerState
     val activeColor = stops.getOrElse(selectedStopIndex) { Color.Cyan }
-    var hue by remember(selectedStopIndex, activeColor) {
-        val hsv = FloatArray(3)
-        android.graphics.Color.colorToHSV(activeColor.toArgb(), hsv)
-        mutableFloatStateOf(hsv[0])
-    }
-    var saturation by remember(selectedStopIndex, activeColor) {
-        val hsv = FloatArray(3)
-        android.graphics.Color.colorToHSV(activeColor.toArgb(), hsv)
-        mutableFloatStateOf(hsv[1])
-    }
-    var valueBrightness by remember(selectedStopIndex, activeColor) {
-        val hsv = FloatArray(3)
-        android.graphics.Color.colorToHSV(activeColor.toArgb(), hsv)
-        mutableFloatStateOf(hsv[2])
-    }
+    val colorPickerState = rememberColorPickerState(activeColor)
 
-    fun updateColorFromHsv(h: Float, s: Float, v: Float) {
-        val argb = android.graphics.Color.HSVToColor(floatArrayOf(h, s, v))
-        val newColor = Color(argb)
+    LaunchedEffect(selectedStopIndex) {
         if (selectedStopIndex in stops.indices) {
-            stops[selectedStopIndex] = newColor
+            colorPickerState.setFromColor(stops[selectedStopIndex])
         }
     }
 
-    var hexInputText by remember(selectedStopIndex, activeColor) {
+    var hexInputText by remember(selectedStopIndex) {
         val argb = activeColor.toArgb()
         mutableStateOf(String.format("%06X", 0xFFFFFF and argb))
     }
@@ -155,6 +140,10 @@ fun CustomPaletteBuilderSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 6.dp,
+        scrimColor = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.4f),
+        contentWindowInsets = { androidx.compose.foundation.layout.WindowInsets.navigationBars },
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 0.dp, bottomEnd = 0.dp),
         modifier = Modifier
             .fillMaxWidth()
             .testTag("custom_palette_builder_sheet")
@@ -408,106 +397,18 @@ fun CustomPaletteBuilderSheet(
                         fontWeight = FontWeight.Bold
                     )
 
-                    // 1. Saturation / Value 2D Touch Surface
-                    BoxWithConstraints(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(140.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                    ) {
-                        val surfaceW = constraints.maxWidth.toFloat()
-                        val surfaceH = constraints.maxHeight.toFloat()
-
-                        // 2D HSV surface gradient: base color with saturation gradient, overlaid with black value gradient
-                        val pureHueColor = Color(android.graphics.Color.HSVToColor(floatArrayOf(hue, 1f, 1f)))
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    Brush.horizontalGradient(
-                                        colors = listOf(Color.White, pureHueColor)
-                                    )
-                                )
-                        )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    Brush.verticalGradient(
-                                        colors = listOf(Color.Transparent, Color.Black)
-                                    )
-                                )
-                                .pointerInput(Unit) {
-                                    detectDragGestures(
-                                        onDragStart = { offset ->
-                                            saturation = (offset.x / surfaceW).coerceIn(0f, 1f)
-                                            valueBrightness = (1f - (offset.y / surfaceH)).coerceIn(0f, 1f)
-                                            updateColorFromHsv(hue, saturation, valueBrightness)
-                                        },
-                                        onDrag = { change, _ ->
-                                            change.consume()
-                                            saturation = (change.position.x / surfaceW).coerceIn(0f, 1f)
-                                            valueBrightness = (1f - (change.position.y / surfaceH)).coerceIn(0f, 1f)
-                                            updateColorFromHsv(hue, saturation, valueBrightness)
-                                        }
-                                    )
-                                }
-                        )
-
-                        // Draggable Pointer Thumb
-                        val thumbX = (saturation * surfaceW).roundToInt()
-                        val thumbY = ((1f - valueBrightness) * surfaceH).roundToInt()
-
-                        Box(
-                            modifier = Modifier
-                                .offset { IntOffset(thumbX - 12.dp.roundToPx(), thumbY - 12.dp.roundToPx()) }
-                                .size(24.dp)
-                                .clip(CircleShape)
-                                .border(3.dp, Color.White, CircleShape)
-                                .background(activeColor)
-                        )
-                    }
-
-                    // 2. Hue Slider (0°..360°)
-                    Column {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(text = "Hue Spectrum", style = MaterialTheme.typography.bodySmall)
-                            Text(text = "${hue.roundToInt()}°", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                    // 1. Decoupled HSV Color Picker (Zero Reset on Touch Release)
+                    HsvColorPicker(
+                        state = colorPickerState,
+                        onColorChanged = { newColor ->
+                            if (selectedStopIndex in stops.indices) {
+                                stops[selectedStopIndex] = newColor
+                                hexInputText = String.format("%06X", 0xFFFFFF and newColor.toArgb())
+                            }
                         }
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(12.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(
-                                    Brush.horizontalGradient(
-                                        listOf(
-                                            Color.Red, Color.Yellow, Color.Green,
-                                            Color.Cyan, Color.Blue, Color.Magenta, Color.Red
-                                        )
-                                    )
-                                )
-                        )
-                        Slider(
-                            value = hue,
-                            onValueChange = {
-                                hue = it
-                                updateColorFromHsv(hue, saturation, valueBrightness)
-                            },
-                            valueRange = 0f..360f,
-                            colors = SliderDefaults.colors(
-                                thumbColor = activeColor,
-                                activeTrackColor = Color.Transparent,
-                                inactiveTrackColor = Color.Transparent
-                            )
-                        )
-                    }
+                    )
 
-                    // 3. Hex Code Input & Quick Swatches
+                    // 2. Hex Code Input & Quick Swatches
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -521,12 +422,10 @@ fun CustomPaletteBuilderSheet(
                                     runCatching {
                                         val parsed = android.graphics.Color.parseColor("#$hexInputText")
                                         val c = Color(parsed)
-                                        stops[selectedStopIndex] = c
-                                        val hsv = FloatArray(3)
-                                        android.graphics.Color.colorToHSV(parsed, hsv)
-                                        hue = hsv[0]
-                                        saturation = hsv[1]
-                                        valueBrightness = hsv[2]
+                                        if (selectedStopIndex in stops.indices) {
+                                            stops[selectedStopIndex] = c
+                                            colorPickerState.setFromColor(c)
+                                        }
                                     }
                                 }
                             },

@@ -39,6 +39,15 @@ object ProceduralRenderer {
             WallpaperPatternType.FLUTED_ARCHES -> FlutedArchesRenderer.render(bitmap, params)
             WallpaperPatternType.LAVA_BLOB -> LavaBlobRenderer.render(bitmap, params)
             WallpaperPatternType.STUDIO -> ProceduralM3Assembler.renderCustomShapes(bitmap, params)
+            WallpaperPatternType.GRIDS -> GridsRenderer.render(bitmap, params)
+            WallpaperPatternType.SLICES -> SlicesRenderer.render(bitmap, params)
+            WallpaperPatternType.CROSS_CURVES -> CrossCurvesRenderer.render(bitmap, params)
+            WallpaperPatternType.PAPER_RIDGES -> PaperRidgesRenderer.render(bitmap, params)
+        }
+
+        // Apply hardware/pixel procedural film grain overlay
+        if (params.filmGrain > 0.005f) {
+            FilmGrainEngine.applyFilmGrainToBitmap(bitmap, params.filmGrain, params.seed)
         }
     }
 }

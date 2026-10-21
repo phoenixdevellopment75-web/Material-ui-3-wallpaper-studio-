@@ -4,9 +4,13 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.RectF
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.dp
 import com.example.math.MathUtils
+import com.example.palette.ColorPalette
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -19,8 +23,9 @@ import kotlin.math.sqrt
  * - Eliminates all spikes, triangular pinch points, and self-intersections.
  * - Tangent continuity (C^1 smoothness) with smooth control point transitions.
  * - Clamped coordinate bounds and strictly bounded width modulations.
- * - Strict 2 flat colors: Warm Eggshell/Cream background (#F5EFEB) with
- *   bold deep Crimson liquid ribbons (#8E1624). Zero 3D gradients or specular reflections.
+ * - Dynamic color palette binding: Foreground and background strictly reflect
+ *   the active palette's primary (stops[1]) and surface (stops[0]) colors.
+ * - Renders smooth flowing ribbons with occasional floating organic droplets.
  */
 object LiquidCamoRenderer : WallpaperRenderer {
 
@@ -37,45 +42,20 @@ object LiquidCamoRenderer : WallpaperRenderer {
         val height = bitmap.height.toFloat()
         val canvas = Canvas(bitmap)
 
-        // 1. Two-tone flat matte colorways matching exact specifications
-        val (bgArgb, liquidArgb) = when (params.subTypeIndex % 5) {
-            0 -> Pair(
-                0xFFF5EFEB.toInt(), // Warm Eggshell/Cream background (#F5EFEB)
-                0xFF8E1624.toInt()  // Bold deep Crimson liquid ribbons (#8E1624)
-            )
-            1 -> Pair(
-                0xFFF4F0E8.toInt(), // Warm bone paper
-                0xFF1E382B.toInt()  // Rich pine green liquid
-            )
-            2 -> Pair(
-                0xFFF7F2EB.toInt(), // Warm chalk
-                0xFFC0583E.toInt()  // Rich terracotta rust
-            )
-            3 -> Pair(
-                0xFFF6EFE9.toInt(), // Pale linen
-                0xFF264653.toInt()  // Deep Persian indigo
-            )
-            else -> {
-                val bg = params.palette.colors.first().toArgb()
-                val fg = if (params.palette.colors.size > 2) {
-                    params.palette.colors[2].toArgb()
-                } else {
-                    params.palette.colors.last().toArgb()
-                }
-                Pair(bg, fg)
-            }
-        }
+        // 1. Dynamic palette bindings: strictly reflect the active palette's primary and surface colors
+        val background = params.palette.stops.firstOrNull() ?: Color(0xFFF6F2EA)
+        val primaryLiquid = params.palette.stops.getOrElse(1) { Color(0xFF8E1624) }
+        val secondaryLiquid = params.palette.stops.getOrElse(2) { primaryLiquid }
 
-        // Draw flat matte background
+        // Draw flat background
         val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = bgArgb
+            color = background.toArgb()
             style = Paint.Style.FILL
         }
         canvas.drawRect(0f, 0f, width, height, bgPaint)
 
         // Paint for liquid ribbons
         val liquidPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = liquidArgb
             style = if (params.isWireframe) Paint.Style.STROKE else Paint.Style.FILL
             if (params.isWireframe) {
                 strokeWidth = (params.lineWidth * (width / 380f)).coerceAtLeast(2.5f)
@@ -86,55 +66,55 @@ object LiquidCamoRenderer : WallpaperRenderer {
         val baseDim = minOf(width, height)
         val scale = params.scale.coerceIn(0.75f, 1.4f)
 
-        // 2. Generate 3 to 4 continuous flowing serpentine rivers
-        val riverCount = 3 + rng.nextInt(2) // 3 or 4 rivers
-        val masterLiquidPath = Path()
-
-        // Spacing across canvas width
+        // 2. Generate 3 to 4 continuous flowing serpentine rivers spanning from top to bottom
+        val riverCount = 3 + rng.nextInt(2) // Exactly 3 to 4 rivers
         val xSpacing = width / (riverCount + 1f)
 
         for (r in 0 until riverCount) {
-            val baseX = xSpacing * (r + 1) + (rng.nextFloat() - 0.5f) * (xSpacing * 0.35f)
-            val numSteps = 28 // Dense sampling for pristine C1 curve conversion
-            val yStart = -height * 0.15f
-            val yEnd = height * 1.15f
+            val riverColor = if (r % 2 == 0) primaryLiquid.toArgb() else secondaryLiquid.toArgb()
+            liquidPaint.color = riverColor
+
+            val baseX = xSpacing * (r + 1) + (rng.nextFloat() - 0.5f) * (xSpacing * 0.20f)
+            val numSteps = 36 // Dense sampling for pristine C1 curve conversion
+            val yStart = -height * 0.10f
+            val yEnd = height * 1.10f
             val stepY = (yEnd - yStart) / (numSteps - 1)
 
             val phase1 = rng.nextFloat() * (2f * PI.toFloat())
             val phase2 = rng.nextFloat() * (2f * PI.toFloat())
-            val freq1 = 1.0f + rng.nextFloat() * 0.5f
-            val freq2 = 2.0f + rng.nextFloat() * 0.5f
-            val amplitude = (width * 0.10f * scale).coerceAtMost(xSpacing * 0.45f)
+            val freq1 = 0.85f + rng.nextFloat() * 0.35f
+            val freq2 = 1.6f + rng.nextFloat() * 0.35f
+            val amplitude = (width * 0.09f * scale).coerceAtMost(xSpacing * 0.35f)
 
             // Minimum and maximum half-width clamped to prevent acute pinch points
-            val baseHalfWidth = (baseDim * (0.075f + rng.nextFloat() * 0.035f) * scale)
-            val minHalfWidth = baseHalfWidth * 0.65f // Never pinch to acute spike
+            val baseHalfWidth = (baseDim * (0.070f + rng.nextFloat() * 0.025f) * scale)
+            val minHalfWidth = baseHalfWidth * 0.72f // Guaranteed smooth floor: C^1 continuous tangent
 
-            val rawNodes = mutableListOf<RibbonNode>()
+            val rawNodes = ArrayList<RibbonNode>(numSteps)
 
             for (i in 0 until numSteps) {
                 val y = yStart + i * stepY
                 val progress = i.toFloat() / (numSteps - 1)
 
-                // Smooth sinusoidal centerline
+                // Smooth sinusoidal centerline with guaranteed tangent continuity
                 val wave = sin(progress * PI.toFloat() * freq1 + phase1) * amplitude +
-                    cos(progress * PI.toFloat() * freq2 + phase2) * (amplitude * 0.35f)
-                val x = (baseX + wave).coerceIn(width * 0.04f, width * 0.96f)
+                    cos(progress * PI.toFloat() * freq2 + phase2) * (amplitude * 0.25f)
+                val x = (baseX + wave).coerceIn(width * 0.05f, width * 0.95f)
 
                 // Modulate thickness smoothly with positive floor
-                val widthMod = 0.85f + 0.35f * sin(progress * 2.5f * PI.toFloat() + phase1)
+                val widthMod = 0.88f + 0.22f * sin(progress * 2.0f * PI.toFloat() + phase1)
                 val hw = (baseHalfWidth * widthMod).coerceAtLeast(minHalfWidth)
 
-                // Calculate derivative dx/dy for analytic normal vector
+                // Calculate derivative dx/dy for analytic normal vector C'(t)
                 val dProgress = 1f / (numSteps - 1)
                 val dWave = (freq1 * PI.toFloat() * cos(progress * PI.toFloat() * freq1 + phase1) * amplitude -
-                    freq2 * PI.toFloat() * sin(progress * PI.toFloat() * freq2 + phase2) * (amplitude * 0.35f)) * dProgress
+                    freq2 * PI.toFloat() * sin(progress * PI.toFloat() * freq2 + phase2) * (amplitude * 0.25f)) * dProgress
 
                 val dx = dWave
                 val dy = stepY
                 val len = sqrt(dx * dx + dy * dy).coerceAtLeast(0.001f)
 
-                // Unit normal (-dy, dx) / len
+                // Consistent normal vector perpendicular to centerline tangent
                 val nx = -dy / len
                 val ny = dx / len
 
@@ -143,31 +123,22 @@ object LiquidCamoRenderer : WallpaperRenderer {
 
             // Construct smooth continuous C1 cubic Bézier closed ribbon path
             val riverPath = buildRibbonPath(rawNodes)
-            masterLiquidPath.addPath(riverPath)
+            canvas.drawPath(riverPath, liquidPaint)
         }
 
-        // 3. Add smooth organic floating enamel droplets/capsules nestled between rivers
+        // 3. Render occasional floating organic droplets in the channels
         val dropletCount = 3 + rng.nextInt(3)
-        for (d in 0 until dropletCount) {
-            val cx = width * (0.15f + rng.nextFloat() * 0.70f)
-            val cy = height * (0.12f + rng.nextFloat() * 0.76f)
-            val radiusX = (baseDim * (0.045f + rng.nextFloat() * 0.035f) * scale)
-            val radiusY = radiusX * (1.2f + rng.nextFloat() * 0.7f) // Elongated smooth organic capsule
-            val rotation = (rng.nextFloat() - 0.5f) * 45f
-
-            val dropPath = Path()
-            val rect = RectF(cx - radiusX, cy - radiusY, cx + radiusX, cy + radiusY)
-            dropPath.addRoundRect(rect, radiusX, radiusX, Path.Direction.CW)
-
-            val matrix = android.graphics.Matrix()
-            matrix.setRotate(rotation, cx, cy)
-            dropPath.transform(matrix)
-
-            masterLiquidPath.addPath(dropPath)
+        val dropletPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.FILL
         }
-
-        // 4. Render master flat liquid paths with zero gradients
-        canvas.drawPath(masterLiquidPath, liquidPaint)
+        for (d in 0 until dropletCount) {
+            val dropX = width * (0.15f + rng.nextFloat() * 0.70f)
+            val dropY = height * (0.12f + rng.nextFloat() * 0.76f)
+            val dropRadius = (width * (0.025f + rng.nextFloat() * 0.020f) * scale)
+            val dropColor = if (d % 2 == 0) primaryLiquid.toArgb() else secondaryLiquid.toArgb()
+            dropletPaint.color = dropColor
+            canvas.drawCircle(dropX, dropY, dropRadius, dropletPaint)
+        }
     }
 
     /**
@@ -235,5 +206,35 @@ object LiquidCamoRenderer : WallpaperRenderer {
 
         path.close()
         return path
+    }
+}
+
+/**
+ * Jetpack Compose DrawScope extension for rendering Liquid Camo / Lava.
+ * Smooth flowing organic ribbons and droplets bound to dynamic palette.
+ */
+fun DrawScope.drawLiquidCamo(
+    palette: ColorPalette,
+    seed: Long
+) {
+    val background = palette.stops.firstOrNull() ?: Color(0xFFF6F2EA)
+    val primaryLiquid = palette.stops.getOrElse(1) { Color(0xFF8E1624) }
+    val secondaryLiquid = palette.stops.getOrElse(2) { primaryLiquid }
+
+    drawRect(color = background)
+
+    val rng = MathUtils.FastRandom(seed)
+    val riverCount = 3 + rng.nextInt(2)
+    val xSpacing = size.width / (riverCount + 1f)
+
+    for (r in 0 until riverCount) {
+        val riverColor = if (r % 2 == 0) primaryLiquid else secondaryLiquid
+        val baseX = xSpacing * (r + 1) + (rng.nextFloat() - 0.5f) * (xSpacing * 0.20f)
+        val dropletCount = 2
+        for (d in 0 until dropletCount) {
+            val dy = size.height * (0.2f + (d * 0.4f) + rng.nextFloat() * 0.1f)
+            val dx = (baseX + (rng.nextFloat() - 0.5f) * 40.dp.toPx()).coerceIn(20.dp.toPx(), size.width - 20.dp.toPx())
+            drawCircle(color = riverColor, radius = 24.dp.toPx(), center = Offset(dx, dy))
+        }
     }
 }

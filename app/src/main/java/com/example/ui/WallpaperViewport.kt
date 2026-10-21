@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.example.engine.AspectRatioPreset
 
+import kotlin.math.ceil
+
 /**
  * Optimized Wallpaper Viewport.
  *
@@ -69,11 +71,13 @@ fun WallpaperViewport(
         bitmap?.asImageBitmap()
     }
 
+    val fallbackBgColor = paletteColors.firstOrNull() ?: MaterialTheme.colorScheme.surfaceContainerLowest
+
     Box(
         modifier = modifier
             .testTag("wallpaper_viewport_root")
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+            .background(fallbackBgColor)
             .transformable(state = transformState),
         contentAlignment = Alignment.Center
     ) {
@@ -89,9 +93,14 @@ fun WallpaperViewport(
                     translationY = offset.y
                 }
                 .drawWithCache {
-                    val canvasWidth = size.width.toInt()
-                    val canvasHeight = size.height.toInt()
+                    val canvasWidth = ceil(size.width).toInt().coerceAtLeast(1)
+                    val canvasHeight = ceil(size.height).toInt().coerceAtLeast(1)
                     onDrawBehind {
+                        // Fill full canvas background first to prevent any 1px seams
+                        drawRect(
+                            color = fallbackBgColor,
+                            size = size
+                        )
                         if (imageBitmap != null && canvasWidth > 0 && canvasHeight > 0) {
                             drawImage(
                                 image = imageBitmap,

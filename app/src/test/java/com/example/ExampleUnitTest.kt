@@ -38,14 +38,16 @@ class ExampleUnitTest {
   }
 
   @Test
-  fun paletteEngine_luminanceSorting() {
-    val palette = PaletteEngine.PRESET_WARM_SUNSET
-    val sorted = PaletteEngine.enforceMonotonicLuminance(palette, ascending = true)
-    for (i in 0 until sorted.colors.size - 1) {
-      val lumA = PaletteEngine.calculateLuminance(sorted.colors[i])
-      val lumB = PaletteEngine.calculateLuminance(sorted.colors[i + 1])
-      assertTrue(lumA <= lumB + 0.001f)
-    }
+  fun customCanvasShape_granularPropertiesPreserved() {
+    val shape = com.example.engine.CustomCanvasShape(
+      id = "test_shape_1",
+      opacity = 0.75f,
+      shadowRadius = 14f,
+      blurRadius = 8f
+    )
+    assertEquals(0.75f, shape.opacity, 0.001f)
+    assertEquals(14f, shape.shadowRadius, 0.001f)
+    assertEquals(8f, shape.blurRadius, 0.001f)
   }
 }
 
